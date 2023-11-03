@@ -1,52 +1,63 @@
 use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
+use thiserror::Error;
 
-/// interval type, representing the interval [pi_1, pi_2], pi_i should always be less than pi_2
-type Interval = (u32, u32);
-type Point = u32;
+type Version = u64;
+type PackageId = u64;
+type Index = u64;
 
 // Version range
-enum Range {
-    Interval(Interval),
-    Point(Point),
+#[derive(Eq, PartialEq, Debug, Clone)]
+pub enum Range {
+    Interval { lower: Version, upper: Version },
+    Point(Version),
     All,
 }
 
-struct Requirement<T> {
-    package_name: T,
-    versions: Vec<Range>,
+#[derive(Eq, PartialEq, Debug)]
+pub struct Requirement {
+    pub package: PackageId,
+    pub versions: Vec<Range>,
 }
 
-struct PackageVer<T> {
-    version: u32,
-    dependencies: Vec<Requirement<T>>,
-    conflicts: Vec<Requirement<T>>,
-}
-
-struct Package<T> {
-    name: T,
-    versions: Vec<PackageVer<T>>,
-}
-
-struct Repository<T> {
-    packages: Vec<Package<T>>,
-    mapping: HashMap<T, u32>,
+#[derive(Eq, PartialEq, Debug)]
+pub struct RequirementSet {
+    pub dependencies: Vec<Requirement>,
+    pub conflicts: Vec<Requirement>,
 }
 
 #[repr(transparent)]
-struct ViaMapping<T>(T);
-
-trait Lookup where {
-    fn lookup(repo: &Repository<Self>, name: &Self) -> Option<u32>;
+#[derive(Eq, PartialEq, Debug)]
+pub struct PackageVer {
+    pub requirements: RequirementSet,
 }
 
-impl<T> Lookup for ViaMapping<T> where {
-    fn lookup(repo: &Repository<Self>, name: &Self) -> Option<u32> {
-        repo.mapping.get(&name).map(|x| x.clone())
-    }
+#[derive(Eq, PartialEq, Debug)]
+pub struct Package {
+    pub id: PackageId,
+    pub versions: Vec<PackageVer>,
 }
 
-impl<T> Lookup for u32 where {
-    fn lookup(repo: &Repository<Self>, name: &Self) -> Option<u32> {
-        Some(name.clone())
+pub struct Repository {
+    pub packages: Vec<Package>,
+    pub mapping: HashMap<PackageId, Index>,
+}
+
+#[derive(Eq, PartialEq, Debug, Error)]
+pub enum ResolutionError<T> {
+    IllegalIndex { package: PackageId, index: Index },
+}
+
+impl<T: Display> Display for ResolutionError<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::IllegalIndex { package, index } => {
+                f.write_fmt(format!(
+                    "Package with Id {} has illegal index {}",
+                    package, index
+                ))?;
+            }
+        }
+        Ok(())
     }
 }
