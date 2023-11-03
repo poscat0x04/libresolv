@@ -1,0 +1,23 @@
+[package]
+name = "libresolv"
+description = "Dependency resolution library intended for use in package managers"
+
+version = "0.1.0"
+edition = "2021"
+authors = ["poscat <poscat@poscat.moe>"]
+
+repository = "https://github.com/poscat0x04/libresolv"
+
+readme = "README.md"
+license = "BSD-3"
+
+[dependencies]
+
+[lib]
+name = "libresolv"
+path = "src/lib.rs"
+test = true
+doctest = true
+bench = false
+doc = true
+crate-type = ["lib"]
