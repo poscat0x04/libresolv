@@ -1,10 +1,9 @@
-use std::collections::HashMap;
-use std::fmt::{Display, Formatter};
-use thiserror::Error;
+use snafu::{prelude::*, Backtrace};
+use std::{iter::Chain, vec};
 
-type Version = u64;
-type PackageId = u64;
-type Index = u64;
+pub type Version = u64;
+pub type PackageId = u64;
+pub type Index = u64;
 
 // Version range
 #[derive(Eq, PartialEq, Debug, Clone)]
@@ -26,6 +25,17 @@ pub struct RequirementSet {
     pub conflicts: Vec<Requirement>,
 }
 
+impl IntoIterator for RequirementSet {
+    type Item = Requirement;
+    type IntoIter = Chain<vec::IntoIter<Self::Item>, vec::IntoIter<Self::Item>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.dependencies
+            .into_iter()
+            .chain(self.conflicts.into_iter())
+    }
+}
+
 #[repr(transparent)]
 #[derive(Eq, PartialEq, Debug)]
 pub struct PackageVer {
@@ -40,24 +50,10 @@ pub struct Package {
 
 pub struct Repository {
     pub packages: Vec<Package>,
-    pub mapping: HashMap<PackageId, Index>,
 }
 
-#[derive(Eq, PartialEq, Debug, Error)]
-pub enum ResolutionError<T> {
-    IllegalIndex { package: PackageId, index: Index },
-}
-
-impl<T: Display> Display for ResolutionError<T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::IllegalIndex { package, index } => {
-                f.write_fmt(format!(
-                    "Package with Id {} has illegal index {}",
-                    package, index
-                ))?;
-            }
-        }
-        Ok(())
-    }
+#[derive(Debug, Snafu)]
+pub enum ResolutionError {
+    #[snafu(display("Illegal index: Index {index} is out of bound"))]
+    IllegalIndex { index: Index, backtrace: Backtrace },
 }
