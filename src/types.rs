@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 /// interval type, representing the interval [pi_1, pi_2], pi_i should always be less than pi_2
 type Interval = (u32, u32);
 type Point = u32;
@@ -25,4 +27,26 @@ struct Package<T> {
     versions: Vec<PackageVer<T>>,
 }
 
-type Repository<T> = Vec<Package<T>>;
+struct Repository<T> {
+    packages: Vec<Package<T>>,
+    mapping: HashMap<T, u32>,
+}
+
+#[repr(transparent)]
+struct ViaMapping<T>(T);
+
+trait Lookup where {
+    fn lookup(repo: &Repository<Self>, name: &Self) -> Option<u32>;
+}
+
+impl<T> Lookup for ViaMapping<T> where {
+    fn lookup(repo: &Repository<Self>, name: &Self) -> Option<u32> {
+        repo.mapping.get(&name).map(|x| x.clone())
+    }
+}
+
+impl<T> Lookup for u32 where {
+    fn lookup(repo: &Repository<Self>, name: &Self) -> Option<u32> {
+        Some(name.clone())
+    }
+}
