@@ -13,6 +13,7 @@ license = "BSD-3"
 
 [dependencies]
 z3 = "0.12"
+thiserror = "1.0"
 
 [lib]
 name = "libresolv"
