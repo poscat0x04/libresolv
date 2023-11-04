@@ -1,5 +1,6 @@
 mod types;
 mod z3_helpers;
+mod constraints;
 
 pub fn add(left: usize, right: usize) -> usize {
     left + right
