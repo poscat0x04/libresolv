@@ -1,0 +1,32 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in library 'libresolv'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--lib",
+          "--package=libresolv",
+        ],
+        "env": {
+          "Z3_SYS_Z3_HEADER": "/usr/include/z3/z3.h"
+        },
+        "filter": {
+          "name": "libresolv",
+          "kind": "lib"
+        }
+      },
+      "args": [
+        "--nocapture"
+      ],
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}
