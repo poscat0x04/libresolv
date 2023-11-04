@@ -1,4 +1,5 @@
 use crate::types::*;
+use crate::z3_helpers::zero;
 use snafu::{Backtrace, GenerateImplicitData};
 use tinyset::SetU32;
 use z3::ast::{Ast, Bool, Int};
@@ -89,15 +90,19 @@ impl AsConstraints for Package {
     where
         T: FnMut(Bool<'a>) -> (),
     {
-        let mut ver_counter = 1;
+        let package = Int::new_const(ctx, self.id);
+        cont(package.ge(&zero(ctx)));
+
+        let mut ver_counter = 0;
         for ver in &self.versions {
-            let package = Int::new_const(ctx, self.id);
+            ver_counter += 1;
             let ver_number = Int::from_u64(ctx, ver_counter);
             let eq_expr = package._eq(&ver_number);
             let mut modified_cont = |b: Bool<'a>| cont(eq_expr.implies(&b));
             ver.requirements.add_constraints(ctx, &mut modified_cont);
-            ver_counter += 1;
         }
+
+        cont(package.le(&Int::from_u64(ctx, ver_counter)));
     }
 }
 
