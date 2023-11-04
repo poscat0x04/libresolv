@@ -108,3 +108,16 @@ pub enum ResolutionError {
     #[snafu(display("Illegal index: Index {index} is out of bound"))]
     IllegalIndex { index: Index, backtrace: Backtrace },
 }
+
+pub enum ResolutionResult {
+    Unsat,
+    UnsatWithCore {
+        package_reqs: Vec<(PackageId, RequirementSet)>,
+        toplevel_reqs: RequirementSet,
+    },
+    Sat {
+        plan: Vec<(PackageId, Version)>,
+    },
+}
+
+pub type Res = Result<ResolutionResult, ResolutionError>;
