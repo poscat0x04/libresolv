@@ -51,22 +51,22 @@ impl AsConstraints for Requirement {
         T: FnMut(Bool<'a>) -> (),
     {
         let v = Int::new_const(ctx, self.package);
-        let exprs: Vec<Bool<'a>> = self
-            .versions
-            .iter()
-            .map(|r| match r {
-                Range::Point(v2) => v._eq(&Int::from_u64(ctx, *v2)),
-                Range::All => Bool::from_bool(ctx, true),
-                Range::Interval { lower, upper } => Bool::and(
-                    ctx,
-                    &[
-                        &v.ge(&Int::from_u64(ctx, *lower)),
-                        &v.le(&Int::from_u64(ctx, *upper)),
-                    ],
-                ),
-            })
-            .collect();
-        cont(Bool::or(ctx, &exprs.iter().collect::<Vec<_>>()[..]));
+        let mut expr = Bool::from_bool(ctx, false);
+
+        for r in &self.versions {
+            match r {
+                Range::Interval { lower, upper } => {
+                    expr |= v.ge(&Int::from_u64(ctx, *lower)) & v.le(&Int::from_u64(ctx, *upper))
+                }
+                Range::Point(v2) => expr |= v._eq(&Int::from_u64(ctx, *v2)),
+                Range::All => {
+                    expr = Bool::from_bool(ctx, true);
+                    break;
+                }
+            }
+        }
+
+        cont(expr)
     }
 }
 
