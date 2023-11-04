@@ -109,17 +109,15 @@ impl AsConstraints for Package {
 fn add_all_constraints<'a, T>(
     ctx: &'a Context,
     repo: &Repository,
+    pids: SetU32,
     requirements: &RequirementSet,
     mut cont: T,
-) -> Result<(), ResolutionError>
-where
+) where
     T: FnMut(Bool<'a>) -> (),
 {
-    let pids = find_closure(repo, requirements)?;
     for pid in pids {
         let package = repo.get_package_unchecked(pid);
         package.add_constraints(ctx, &mut cont);
     }
     requirements.add_constraints(ctx, &mut cont);
-    Ok(())
 }
