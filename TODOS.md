@@ -2,8 +2,8 @@
 
 Ordered by priority (descending).
 
-- [ ] Dependency resolution
-- [ ] Unsat core generation and processing
+- [x] Dependency resolution
+- [ ] Unsat core [generation](https://microsoft.github.io/z3guide/programming/Example%20Programs/Cores%20and%20Satisfying%20Subsets/) and processing
 - [ ] Optimizing dependency resolution (optimizing for newest versions of packages)
 - [ ] Optimizing dependency resolution (optimizing for minimal number of packages)
 - [ ] Repository generation and serialization
