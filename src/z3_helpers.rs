@@ -1,5 +1,5 @@
 use crate::types::*;
-use z3::ast::Int;
+use z3::ast::{Ast, Int};
 use z3::{set_global_param, Config, Context};
 
 pub fn set_params() {
@@ -25,14 +25,17 @@ pub fn sgn<'a>(ctx: &'a Context, a: Int<'a>) -> Int<'a> {
     )
 }
 
-// the taxicab distance from the newest versions, useful as an optimization metric
+// the taxicab distance of all installed from the newest versions, useful as an optimization metric
 pub fn distance_from_newest(
     ctx: &Context,
     iter: impl IntoIterator<Item = (PackageId, Version)>,
 ) -> Int {
     let mut expr = zero(ctx);
     for (pid, max_ver) in iter {
-        expr += Int::from_u64(ctx, max_ver) - Int::new_const(ctx, pid);
+        let pkg_ver = Int::new_const(ctx, pid);
+        expr += pkg_ver
+            ._eq(&zero(ctx))
+            .ite(&zero(ctx), &(Int::from_u64(ctx, max_ver) - pkg_ver));
     }
     expr
 }
