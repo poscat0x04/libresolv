@@ -1,4 +1,5 @@
 use crate::types::*;
+use crate::utils::merge_and_sort_ranges;
 use crate::z3_helpers::zero;
 use snafu::{Backtrace, GenerateImplicitData};
 use tinyset::SetU32;
@@ -40,25 +41,22 @@ where
 }
 
 pub trait AsConstraints {
-    fn add_constraints<'a, T>(&self, ctx: &'a Context, cont: T)
-    where
-        T: FnMut(Bool<'a>) -> ();
+    fn add_constraints<'a>(&self, ctx: &'a Context, expr_cont: impl FnMut(Bool<'a>));
 }
 
 impl AsConstraints for Requirement {
-    fn add_constraints<'a, T>(&self, ctx: &'a Context, mut cont: T)
-    where
-        T: FnMut(Bool<'a>) -> (),
-    {
+    fn add_constraints<'a>(&self, ctx: &'a Context, mut expr_cont: impl FnMut(Bool<'a>)) {
         let v = Int::new_const(ctx, self.package);
         let mut expr = Bool::from_bool(ctx, false);
 
-        for r in &self.versions {
+        for r in merge_and_sort_ranges(&self.versions) {
             match r {
                 Range::Interval { lower, upper } => {
-                    expr |= v.ge(&Int::from_u64(ctx, *lower)) & v.le(&Int::from_u64(ctx, *upper))
+                    expr |= v.ge(&Int::from_u64(ctx, lower)) & v.le(&Int::from_u64(ctx, upper));
                 }
-                Range::Point(v2) => expr |= v._eq(&Int::from_u64(ctx, *v2)),
+                Range::Point(v2) => {
+                    expr |= v._eq(&Int::from_u64(ctx, v2));
+                }
                 Range::All => {
                     expr = Bool::from_bool(ctx, true);
                     break;
@@ -66,19 +64,16 @@ impl AsConstraints for Requirement {
             }
         }
 
-        cont(expr)
+        expr_cont(expr.simplify())
     }
 }
 
 impl AsConstraints for RequirementSet {
-    fn add_constraints<'a, T>(&self, ctx: &'a Context, mut cont: T)
-    where
-        T: FnMut(Bool<'a>) -> (),
-    {
+    fn add_constraints<'a>(&self, ctx: &'a Context, mut expr_cont: impl FnMut(Bool<'a>)) {
         for dep in &self.dependencies {
-            dep.add_constraints(ctx, &mut cont)
+            dep.add_constraints(ctx, &mut expr_cont)
         }
-        let mut reversed_cont = |b: Bool<'a>| cont(b.not());
+        let mut reversed_cont = |expr: Bool<'a>| expr_cont(expr.not());
         for antidep in &self.conflicts {
             antidep.add_constraints(ctx, &mut reversed_cont)
         }
@@ -86,38 +81,33 @@ impl AsConstraints for RequirementSet {
 }
 
 impl AsConstraints for Package {
-    fn add_constraints<'a, T>(&self, ctx: &'a Context, mut cont: T)
-    where
-        T: FnMut(Bool<'a>) -> (),
-    {
+    fn add_constraints<'a>(&self, ctx: &'a Context, mut expr_cont: impl FnMut(Bool<'a>)) {
         let package = Int::new_const(ctx, self.id);
-        cont(package.ge(&zero(ctx)));
+        expr_cont(package.ge(&zero(ctx)));
 
         let mut ver_counter = 0;
         for ver in &self.versions {
             ver_counter += 1;
             let ver_number = Int::from_u64(ctx, ver_counter);
             let eq_expr = package._eq(&ver_number);
-            let mut modified_cont = |b: Bool<'a>| cont(eq_expr.implies(&b));
+            let mut modified_cont = |expr| expr_cont(eq_expr.implies(&expr));
             ver.requirements.add_constraints(ctx, &mut modified_cont);
         }
 
-        cont(package.le(&Int::from_u64(ctx, ver_counter)));
+        expr_cont(package.le(&Int::from_u64(ctx, ver_counter)));
     }
 }
 
-fn add_all_constraints<'a, T>(
+pub fn add_all_constraints<'a>(
     ctx: &'a Context,
     repo: &Repository,
-    pids: SetU32,
+    pids: impl IntoIterator<Item = u32>,
     requirements: &RequirementSet,
-    mut cont: T,
-) where
-    T: FnMut(Bool<'a>) -> (),
-{
+    mut expr_cont: impl FnMut(Bool<'a>),
+) {
     for pid in pids {
         let package = repo.get_package_unchecked(pid);
-        package.add_constraints(ctx, &mut cont);
+        package.add_constraints(ctx, &mut expr_cont);
     }
-    requirements.add_constraints(ctx, &mut cont);
+    requirements.add_constraints(ctx, &mut expr_cont);
 }
