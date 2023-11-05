@@ -58,7 +58,7 @@ impl AsConstraints for Requirement {
                     expr |= v._eq(&Int::from_u64(ctx, v2));
                 }
                 Range::All => {
-                    expr = Bool::from_bool(ctx, true);
+                    expr = v._eq(&zero(ctx)).not();
                     break;
                 }
             }

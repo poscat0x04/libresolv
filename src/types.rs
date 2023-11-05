@@ -24,16 +24,68 @@ impl Display for Range {
     }
 }
 
+impl Range {
+    pub fn point(v: Version) -> Self {
+        Self::Point(v)
+    }
+
+    pub fn interval(lower: Version, upper: Version) -> Option<Self> {
+        if lower < upper {
+            Some(Self::Interval { lower, upper })
+        } else {
+            None
+        }
+    }
+
+    pub fn interval_unchecked(lower: Version, upper: Version) -> Self {
+        Self::Interval { lower, upper }
+    }
+
+    pub fn all() -> Self {
+        Self::All
+    }
+}
+
 #[derive(Eq, PartialEq, Debug)]
 pub struct Requirement {
     pub package: PackageId,
     pub versions: Vec<Range>,
 }
 
+impl Requirement {
+    pub fn new(package: PackageId, versions: Vec<Range>) -> Self {
+        Self { package, versions }
+    }
+
+    pub fn single_version(package: PackageId, version: Version) -> Self {
+        Self {
+            package,
+            versions: vec![Range::point(version)],
+        }
+    }
+
+    pub fn range(package: PackageId, lower: Version, upper: Version) -> Option<Self> {
+        let r = Range::interval(lower, upper)?;
+        Some(Self {
+            package,
+            versions: vec![r],
+        })
+    }
+}
+
 #[derive(Eq, PartialEq, Debug)]
 pub struct RequirementSet {
     pub dependencies: Vec<Requirement>,
     pub conflicts: Vec<Requirement>,
+}
+
+impl Default for RequirementSet {
+    fn default() -> Self {
+        Self {
+            dependencies: Vec::new(),
+            conflicts: Vec::new(),
+        }
+    }
 }
 
 impl IntoIterator for RequirementSet {
@@ -55,6 +107,30 @@ impl<'a> IntoIterator for &'a RequirementSet {
         (&self.dependencies)
             .into_iter()
             .chain((&self.conflicts).into_iter())
+    }
+}
+
+impl RequirementSet {
+    pub fn from_deps(deps: Vec<Requirement>) -> Self {
+        Self {
+            dependencies: deps,
+            conflicts: Vec::new(),
+        }
+    }
+
+    pub fn from_antideps(antideps: Vec<Requirement>) -> Self {
+        Self {
+            dependencies: Vec::new(),
+            conflicts: antideps,
+        }
+    }
+
+    pub fn add_deps(&mut self, mut deps: Vec<Requirement>) {
+        self.dependencies.append(&mut deps);
+    }
+
+    pub fn add_antideps(&mut self, mut antideps: Vec<Requirement>) {
+        self.conflicts.append(&mut antideps);
     }
 }
 
@@ -112,6 +188,7 @@ pub enum ResolutionError {
     TimeOut { backtrace: Backtrace },
 }
 
+#[derive(Eq, PartialEq, Debug)]
 pub enum ResolutionResult {
     Unsat,
     UnsatWithCore {

@@ -94,3 +94,63 @@ pub fn parallel_optimize_minimal(
 ) -> Res {
     todo!()
 }
+
+#[cfg(test)]
+mod test {
+    use crate::{
+        types::{Package, PackageVer, Range, Repository, Requirement, RequirementSet},
+        z3_helpers::{default_config, set_params},
+    };
+
+    use super::simple_solve;
+
+    #[test]
+    fn test_simple_solver() {
+        let p0 = Package {
+            id: 0,
+            versions: vec![
+                PackageVer {
+                    requirements: Default::default(),
+                },
+                PackageVer {
+                    requirements: Default::default(),
+                },
+                PackageVer {
+                    requirements: Default::default(),
+                },
+                PackageVer {
+                    requirements: Default::default(),
+                },
+            ],
+        };
+        let p1 = Package {
+            id: 1,
+            versions: vec![PackageVer {
+                requirements: RequirementSet::from_deps(vec![Requirement::new(
+                    0,
+                    vec![Range::interval_unchecked(1, 2)],
+                )]),
+            }],
+        };
+        let p2 = Package {
+            id: 2,
+            versions: vec![PackageVer {
+                requirements: RequirementSet::from_deps(vec![Requirement::new(
+                    0,
+                    vec![Range::interval_unchecked(2, 3)],
+                )]),
+            }],
+        };
+        let req_set = RequirementSet::from_deps(vec![
+            Requirement::new(1, vec![Range::all()]),
+            Requirement::new(2, vec![Range::all()]),
+        ]);
+        let repo = Repository {
+            packages: vec![p0, p1, p2],
+        };
+        set_params();
+        let cfg = default_config();
+        let r = simple_solve(&cfg, &repo, &req_set).unwrap();
+        println!("{r:?}");
+    }
+}

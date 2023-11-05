@@ -3,6 +3,7 @@ use z3::ast::{Ast, Int};
 use z3::{set_global_param, Config, Context};
 
 pub fn set_params() {
+    set_global_param("unsat_core", "true");
     set_global_param("parallel.enable", "true");
     set_global_param("smt.core.minimize", "true");
     set_global_param("smt.threads", "12");
