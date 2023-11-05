@@ -17,8 +17,8 @@ pub enum Range {
 impl Display for Range {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Range::Interval { lower, upper } => write!(f, "[{}, {}]", lower, upper),
-            Range::Point(v) => write!(f, "{{{}}}", v),
+            Range::Interval { lower, upper } => write!(f, "[{lower}, {upper}]"),
+            Range::Point(v) => write!(f, "{{{v}}}"),
             Range::All => write!(f, "𝒰"),
         }
     }

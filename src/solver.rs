@@ -31,14 +31,14 @@ fn plan_from_model(ctx: &Context, model: Model, pids: impl Iterator<Item = Packa
         if !no_interp.is_empty() {
             panic_msg
                 .push_str("The following packages do not have an interpretation in the model:\n");
-            panic_msg.push_str(&format!("  {:?}", no_interp))
+            panic_msg.push_str(&format!("  {no_interp:?}"))
         }
 
         if !interp_not_u64.is_empty() {
             panic_msg.push_str(
                         "The following packages have an interpretation but the value cannot fit in a u64:\n",
                     );
-            panic_msg.push_str(&format!("  {:?}", interp_not_u64))
+            panic_msg.push_str(&format!("  {interp_not_u64:?}"))
         }
         panic!("{panic_msg}");
     }
