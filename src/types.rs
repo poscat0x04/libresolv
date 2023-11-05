@@ -4,6 +4,7 @@ use std::{fmt::Display, iter::Chain, slice, vec};
 pub type Version = u64;
 pub type PackageId = u32;
 pub type Index = u32;
+pub type Plan = Vec<(PackageId, Version)>;
 
 // Version range
 #[derive(Eq, PartialEq, Debug, Clone)]
@@ -107,6 +108,8 @@ impl Repository {
 pub enum ResolutionError {
     #[snafu(display("Illegal index: Index {index} is out of bound"))]
     IllegalIndex { index: Index, backtrace: Backtrace },
+    #[snafu(display("Timeout during dependency resolution"))]
+    TimeOut { backtrace: Backtrace },
 }
 
 pub enum ResolutionResult {
@@ -116,7 +119,7 @@ pub enum ResolutionResult {
         toplevel_reqs: RequirementSet,
     },
     Sat {
-        plan: Vec<(PackageId, Version)>,
+        plan: Plan,
     },
 }
 

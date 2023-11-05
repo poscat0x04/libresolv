@@ -101,7 +101,7 @@ impl AsConstraints for Package {
 pub fn add_all_constraints<'a>(
     ctx: &'a Context,
     repo: &Repository,
-    pids: impl IntoIterator<Item = u32>,
+    pids: impl Iterator<Item = u32>,
     requirements: &RequirementSet,
     mut expr_cont: impl FnMut(Bool<'a>),
 ) {
