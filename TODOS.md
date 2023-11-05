@@ -15,3 +15,8 @@ Ordered by priority (descending).
 - [ ] Full test coverage
 - [ ] Set up CI
 - [ ] Look into z3 parameters to optimize performance
+
+## maybe?
+
+- [ ] multiple backends (specifically cvc5)
+- [ ] smtlib2 code emission
