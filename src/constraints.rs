@@ -8,7 +8,7 @@ use z3::Context;
 
 pub fn find_closure<'a, T>(repo: &'a Repository, iter: T) -> Result<SetU32, ResolutionError>
 where
-    T: IntoIterator<Item = &'a Requirement>,
+    T: Iterator<Item = &'a Requirement>,
 {
     let mut s = SetU32::new();
     find_closure_helper(repo, iter, &mut s)?;
@@ -21,7 +21,7 @@ fn find_closure_helper<'a, 'b, T>(
     acc: &'b mut SetU32,
 ) -> Result<(), ResolutionError>
 where
-    T: IntoIterator<Item = &'a Requirement>,
+    T: Iterator<Item = &'a Requirement>,
 {
     for req in iter {
         let not_present = acc.insert(req.package);
@@ -33,7 +33,7 @@ where
                 }
             })?;
             for ver in &package.versions {
-                find_closure_helper(&repo, &ver.requirements, acc)?;
+                find_closure_helper(&repo, (&ver.requirements).into_iter(), acc)?;
             }
         }
     }

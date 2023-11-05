@@ -49,7 +49,7 @@ pub fn simple_solve(cfg: &Config, repo: &Repository, requirements: &RequirementS
     let ctx = Context::new(&cfg);
     let solver = Solver::new(&ctx);
 
-    let closure = find_closure(repo, requirements)?;
+    let closure = find_closure(repo, (&requirements).into_iter())?;
 
     let expr_cont = |b| solver.assert(&b);
     add_all_constraints(&ctx, repo, closure.iter(), requirements, expr_cont);
