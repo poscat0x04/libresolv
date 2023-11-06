@@ -1,12 +1,25 @@
 use crate::types::*;
 use z3::ast::{Ast, Int};
-use z3::{set_global_param, Config, Context};
+use z3::{set_global_param, Config, Context, Params};
 
-pub fn set_params() {
+pub fn set_global_params() {
     set_global_param("unsat_core", "true");
     set_global_param("parallel.enable", "true");
+    set_global_param("sat.core.minimize", "true");
+    set_global_param("sat.threads", "12");
     set_global_param("smt.core.minimize", "true");
     set_global_param("smt.threads", "12");
+}
+
+pub fn default_params<'a>(ctx: &'a Context) -> Params<'a> {
+    let mut p = Params::new(ctx);
+    p.set_bool("unsat_core", true);
+    p.set_bool("parallel.enable", true);
+    p.set_bool("sat.core.minimize", true);
+    p.set_u32("sat.threads", 12);
+    p.set_bool("smt.core.minimize", true);
+    p.set_u32("smt.threads", 12);
+    p
 }
 
 pub fn default_config() -> Config {

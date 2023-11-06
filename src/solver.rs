@@ -1,9 +1,10 @@
 use crate::{
     constraints::{add_all_constraints, find_closure},
     types::*,
+    z3_helpers::default_params,
 };
 use snafu::{Backtrace, GenerateImplicitData};
-use z3::{ast::Int, Config, Context, Model, Optimize, Solver};
+use z3::{ast::Int, Config, Context, Model, Optimize, Solver, Tactic};
 
 fn plan_from_model(ctx: &Context, model: Model, pids: impl Iterator<Item = PackageId>) -> Plan {
     let mut plan = Vec::new();
@@ -47,7 +48,9 @@ fn plan_from_model(ctx: &Context, model: Model, pids: impl Iterator<Item = Packa
 
 pub fn simple_solve(cfg: &Config, repo: &Repository, requirements: &RequirementSet) -> Res {
     let ctx = Context::new(&cfg);
-    let solver = Solver::new(&ctx);
+    let tactic = Tactic::new(&ctx, "simplify").and_then(&Tactic::new(&ctx, "psat"));
+    let solver = tactic.solver();
+    solver.set_params(&default_params(&ctx));
 
     let closure = find_closure(repo, (&requirements).into_iter())?;
 
@@ -99,7 +102,7 @@ pub fn parallel_optimize_minimal(
 mod test {
     use crate::{
         types::{Package, PackageVer, Range, Repository, Requirement, RequirementSet},
-        z3_helpers::{default_config, set_params},
+        z3_helpers::{default_config, set_global_params},
     };
 
     use super::simple_solve;
@@ -148,7 +151,7 @@ mod test {
         let repo = Repository {
             packages: vec![p0, p1, p2],
         };
-        set_params();
+        set_global_params();
         let cfg = default_config();
         let r = simple_solve(&cfg, &repo, &req_set).unwrap();
         println!("{r:?}");
