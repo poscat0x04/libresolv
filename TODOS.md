@@ -3,7 +3,7 @@
 Ordered by priority (descending).
 
 - [x] Dependency resolution
-- [ ] (minimal) Unsat core generation and processing
+- [x] (minimal) Unsat core generation and processing
 - [ ] Optimizing dependency resolution (optimizing for newest versions of packages)
 - [ ] Optimizing dependency resolution (optimizing for minimal number of packages)
 - [ ] Repository generation and serialization
