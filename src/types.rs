@@ -63,6 +63,21 @@ pub struct Requirement {
     pub versions: Vec<Range>,
 }
 
+impl Display for Requirement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut iter = self.versions.iter();
+        if let Some(r) = iter.next() {
+            write!(f, "Ver({}) ∈ {r}", self.package)?;
+            for r in iter {
+                write!(f, " ∪ {r}")?;
+            }
+            Ok(())
+        } else {
+            write!(f, "Ver({}) = 0", self.package)
+        }
+    }
+}
+
 impl Requirement {
     pub fn new(package: PackageId, versions: Vec<Range>) -> Self {
         Self { package, versions }
