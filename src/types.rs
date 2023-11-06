@@ -1,3 +1,6 @@
+pub mod expr;
+
+use intmap::IntMap;
 use snafu::{prelude::*, Backtrace};
 use std::{fmt::Display, iter::Chain, slice, vec};
 
@@ -83,6 +86,13 @@ impl Requirement {
         Self { package, versions }
     }
 
+    pub fn any_version(package: PackageId) -> Self {
+        Self {
+            package,
+            versions: vec![Range::all()],
+        }
+    }
+
     pub fn single_version(package: PackageId, version: Version) -> Self {
         Self {
             package,
@@ -137,10 +147,24 @@ impl<'a> IntoIterator for &'a RequirementSet {
 }
 
 impl RequirementSet {
+    pub fn from_dep(dep: Requirement) -> Self {
+        Self {
+            dependencies: vec![dep],
+            conflicts: Vec::new(),
+        }
+    }
+
     pub fn from_deps(deps: Vec<Requirement>) -> Self {
         Self {
             dependencies: deps,
             conflicts: Vec::new(),
+        }
+    }
+
+    pub fn from_antidep(antidep: Requirement) -> Self {
+        Self {
+            dependencies: Vec::new(),
+            conflicts: vec![antidep],
         }
     }
 
@@ -151,8 +175,16 @@ impl RequirementSet {
         }
     }
 
+    pub fn add_dep(&mut self, dep: Requirement) {
+        self.dependencies.push(dep);
+    }
+
     pub fn add_deps(&mut self, mut deps: Vec<Requirement>) {
         self.dependencies.append(&mut deps);
+    }
+
+    pub fn add_antidep(&mut self, antidep: Requirement) {
+        self.conflicts.push(antidep);
     }
 
     pub fn add_antideps(&mut self, mut antideps: Vec<Requirement>) {
@@ -204,6 +236,14 @@ impl Repository {
     pub fn get_package_unchecked(&self, id: PackageId) -> &Package {
         &self.packages[id as usize]
     }
+
+    pub fn newest_ver_of(&self, id: PackageId) -> Option<Version> {
+        self.get_package(id).map(|p| p.newest_version_number())
+    }
+
+    pub fn newest_ver_of_unchecked(&self, id: PackageId) -> Version {
+        self.get_package_unchecked(id).newest_version_number()
+    }
 }
 
 #[derive(Debug, Snafu)]
@@ -215,15 +255,16 @@ pub enum ResolutionError {
 }
 
 #[derive(Eq, PartialEq, Debug)]
+pub struct ConstraintSet {
+    pub package_reqs: IntMap<IntMap<RequirementSet>>,
+    pub toplevel_reqs: RequirementSet,
+}
+
+#[derive(Eq, PartialEq, Debug)]
 pub enum ResolutionResult {
     Unsat,
-    UnsatWithCore {
-        package_reqs: Vec<(PackageId, RequirementSet)>,
-        toplevel_reqs: RequirementSet,
-    },
-    Sat {
-        plan: Plan,
-    },
+    UnsatWithCore { core: ConstraintSet },
+    Sat { plan: Plan },
 }
 
 pub type Res = Result<ResolutionResult, ResolutionError>;

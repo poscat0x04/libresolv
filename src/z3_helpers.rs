@@ -19,6 +19,7 @@ pub fn default_params<'a>(ctx: &'a Context) -> Params<'a> {
     p.set_u32("sat.threads", 12);
     p.set_bool("smt.core.minimize", true);
     p.set_u32("smt.threads", 12);
+    p.set_bool(":core.minimize", true);
     p
 }
 
