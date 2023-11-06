@@ -4,8 +4,8 @@ Ordered by priority (descending).
 
 - [x] Dependency resolution
 - [x] (minimal) Unsat core generation and processing
-- [ ] Optimizing dependency resolution (optimizing for newest versions of packages)
-- [ ] Optimizing dependency resolution (optimizing for minimal number of packages)
+- [x] Optimizing dependency resolution (optimizing for newest versions of packages)
+- [x] Optimizing dependency resolution (optimizing for minimal number of packages)
 - [ ] Repository generation and serialization
 - [ ] Parallel resolution
 - [ ] High-level API
