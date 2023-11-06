@@ -6,14 +6,15 @@ use crate::{
         expr::{AtomicExpr, Expr},
         *,
     },
-    z3_helpers::default_params,
+    z3_helpers::{default_config, default_params, distance_from_newest, installed_packages},
 };
 use bumpalo::Bump;
 use intmap::IntMap;
 use snafu::{Backtrace, GenerateImplicitData};
+use tinyset::SetU32;
 use z3::{
     ast::{Ast, Bool, Int},
-    Config, Context, Model, Solver,
+    Config, Context, Model, Optimize, Solver,
 };
 
 fn plan_from_model(ctx: &Context, model: Model, pids: impl Iterator<Item = PackageId>) -> Plan {
@@ -154,7 +155,6 @@ fn process_version_range(expr: &Expr<'_>) -> Requirement {
 }
 
 fn process_version_range_helper(expr: &Expr<'_>) -> (PackageId, Vec<Range>) {
-    let panic = || panic!("Impossible: unknown expression {expr} for version range(s)");
     match expr {
         Expr::Atom(AtomicExpr::VerEq { pid, version }) => (*pid, vec![Range::point(*version)]),
         Expr::And(lhs, rhs) => {
@@ -196,12 +196,13 @@ fn process_version_range_helper(expr: &Expr<'_>) -> (PackageId, Vec<Range>) {
             (pid1, rs1)
         }
         Expr::Not(Expr::Atom(AtomicExpr::VerEq { pid, version: 0 })) => (*pid, vec![Range::all()]),
-        _ => panic(),
+        _ => panic!("Impossible: unknown expression {expr} for version range(s)"),
     }
 }
 
-pub fn simple_solve(cfg: &Config, repo: &Repository, requirements: &RequirementSet) -> Res {
-    let ctx = Context::new(cfg);
+pub fn simple_solve(repo: &Repository, requirements: &RequirementSet) -> Res {
+    let cfg = default_config();
+    let ctx = Context::new(&cfg);
     let solver = Solver::new_for_logic(&ctx, "QF_FD").unwrap();
     solver.set_params(&default_params(&ctx));
 
@@ -256,12 +257,94 @@ pub fn simple_solve(cfg: &Config, repo: &Repository, requirements: &RequirementS
     }
 }
 
-pub fn optimize_newest(cfg: &Config, repo: &Repository, requirement: &RequirementSet) -> Res {
-    todo!()
+pub fn optimize_newest(repo: &Repository, requirements: &RequirementSet) -> Res {
+    let mut cfg = default_config();
+    let ctx = Context::new(&cfg);
+    let solver = Optimize::new(&ctx);
+
+    let allocator = Bump::new();
+
+    let closure = find_closure(repo, requirements.into_iter())?;
+
+    let package_pairs = closure
+        .iter()
+        .map(|pid| (pid, repo.newest_ver_of_unchecked(pid)));
+
+    let metric = distance_from_newest(&ctx, package_pairs);
+
+    let mut assert_id = 0;
+    let expr_cont = |expr: Bool, _sym_expr| {
+        solver.assert(&expr.simplify());
+        assert_id += 1;
+    };
+    add_all_constraints(
+        &allocator,
+        &ctx,
+        repo,
+        closure.iter(),
+        requirements,
+        expr_cont,
+    );
+    solver.minimize(&metric);
+
+    match solver.check(&[]) {
+        z3::SatResult::Unsat => Ok(ResolutionResult::Unsat),
+        z3::SatResult::Unknown => Err(ResolutionError::TimeOut {
+            backtrace: Backtrace::generate(),
+        }),
+        z3::SatResult::Sat => {
+            let model = solver
+                .get_model()
+                .expect("Impossible: satisfiable but failed to generate a model");
+
+            let plan = plan_from_model(&ctx, model, closure.iter());
+
+            Ok(ResolutionResult::Sat { plan })
+        }
+    }
 }
 
-pub fn optimize_minimal(cfg: &Config, repo: &Repository, requirement: &RequirementSet) -> Res {
-    todo!()
+pub fn optimize_minimal(repo: &Repository, requirements: &RequirementSet) -> Res {
+    let mut cfg = default_config();
+    let ctx = Context::new(&cfg);
+    let solver = Optimize::new(&ctx);
+
+    let allocator = Bump::new();
+
+    let closure = find_closure(repo, requirements.into_iter())?;
+
+    let metric = installed_packages(&ctx, closure.iter());
+
+    let mut assert_id = 0;
+    let expr_cont = |expr: Bool, _sym_expr| {
+        solver.assert(&expr.simplify());
+        assert_id += 1;
+    };
+    add_all_constraints(
+        &allocator,
+        &ctx,
+        repo,
+        closure.iter(),
+        requirements,
+        expr_cont,
+    );
+    solver.minimize(&metric);
+
+    match solver.check(&[]) {
+        z3::SatResult::Unsat => Ok(ResolutionResult::Unsat),
+        z3::SatResult::Unknown => Err(ResolutionError::TimeOut {
+            backtrace: Backtrace::generate(),
+        }),
+        z3::SatResult::Sat => {
+            let model = solver
+                .get_model()
+                .expect("Impossible: satisfiable but failed to generate a model");
+
+            let plan = plan_from_model(&ctx, model, closure.iter());
+
+            Ok(ResolutionResult::Sat { plan })
+        }
+    }
 }
 
 pub fn parallel_optimize_newest(
@@ -283,8 +366,9 @@ pub fn parallel_optimize_minimal(
 #[cfg(test)]
 mod test {
     use crate::{
+        solver::{optimize_minimal, optimize_newest},
         types::{Package, PackageVer, Range, Repository, Requirement, RequirementSet},
-        z3_helpers::{default_config, set_global_params},
+        z3_helpers::set_global_params,
     };
 
     use super::simple_solve;
@@ -323,19 +407,18 @@ mod test {
                 PackageVer {
                     requirements: RequirementSet::from_deps(vec![Requirement::new(
                         0,
-                        vec![Range::interval_unchecked(4, 4)],
+                        vec![Range::interval_unchecked(3, 4)],
                     )]),
                 },
                 PackageVer {
                     requirements: RequirementSet::from_deps(vec![Requirement::new(
                         0,
-                        vec![Range::interval_unchecked(4, 4)],
+                        vec![Range::interval_unchecked(3, 4)],
                     )]),
                 },
             ],
         };
-        let mut req_set =
-            RequirementSet::from_deps(vec![Requirement::new(2, vec![Range::point(1)])]);
+        let mut req_set = RequirementSet::from_deps(vec![Requirement::new(2, vec![Range::all()])]);
         req_set.add_deps(vec![Requirement::new(
             1,
             vec![Range::interval_unchecked(1, 1)],
@@ -344,8 +427,11 @@ mod test {
             packages: vec![p0, p1, p2],
         };
         set_global_params();
-        let cfg = default_config();
-        let r = simple_solve(&cfg, &repo, &req_set).unwrap();
+        let mut r = simple_solve(&repo, &req_set).unwrap();
+        println!("{r:?}");
+        r = optimize_newest(&repo, &req_set).unwrap();
+        println!("{r:?}");
+        r = optimize_minimal(&repo, &req_set).unwrap();
         println!("{r:?}");
     }
 }

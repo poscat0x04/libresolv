@@ -24,7 +24,9 @@ pub fn default_params(ctx: &Context) -> Params<'_> {
 }
 
 pub fn default_config() -> Config {
-    Config::new()
+    let mut cfg = Config::new();
+    cfg.set_bool_param_value("unsat_core", true);
+    cfg
 }
 
 pub fn zero(ctx: &Context) -> Int {
