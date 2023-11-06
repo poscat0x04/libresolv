@@ -35,7 +35,7 @@ where
                 }
             })?;
             for ver in &package.versions {
-                find_closure_helper(&repo, (&ver.requirements).into_iter(), acc)?;
+                find_closure_helper(repo, (&ver.requirements).into_iter(), acc)?;
             }
         }
     }

@@ -11,7 +11,7 @@ pub fn set_global_params() {
     set_global_param("smt.threads", "12");
 }
 
-pub fn default_params<'a>(ctx: &'a Context) -> Params<'a> {
+pub fn default_params(ctx: &Context) -> Params<'_> {
     let mut p = Params::new(ctx);
     p.set_bool("unsat_core", true);
     p.set_bool("parallel.enable", true);
@@ -24,8 +24,7 @@ pub fn default_params<'a>(ctx: &'a Context) -> Params<'a> {
 }
 
 pub fn default_config() -> Config {
-    let mut cfg = Config::new();
-    cfg
+    Config::new()
 }
 
 pub fn zero(ctx: &Context) -> Int {

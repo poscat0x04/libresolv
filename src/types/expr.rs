@@ -172,6 +172,7 @@ impl Default for ExprPrec {
     }
 }
 
+#[allow(clippy::neg_cmp_op_on_partial_ord)]
 impl DisplayPrec for Expr<'_> {
     type Prec = ExprPrec;
     fn fmt_prec(&self, prec: ExprPrec, f: &mut Formatter<'_>) -> fmt::Result {

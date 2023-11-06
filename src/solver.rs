@@ -22,7 +22,7 @@ fn plan_from_model(ctx: &Context, model: Model, pids: impl Iterator<Item = Packa
     let mut interp_not_u64 = Vec::new();
 
     for package_id in pids {
-        let p = Int::new_const(&ctx, package_id);
+        let p = Int::new_const(ctx, package_id);
         if let Some(interp) = model.get_const_interp(&p) {
             if let Some(v) = interp.as_u64() {
                 plan.push((package_id, v))
@@ -56,7 +56,7 @@ fn plan_from_model(ctx: &Context, model: Model, pids: impl Iterator<Item = Packa
     plan
 }
 
-fn process_unsat_core<'a>(repo: &Repository, core_assertions: Vec<&Expr<'a>>) -> ConstraintSet {
+fn process_unsat_core(repo: &Repository, core_assertions: Vec<&Expr<'_>>) -> ConstraintSet {
     let mut package_reqs: IntMap<IntMap<RequirementSet>> = IntMap::new();
     let mut dependencies = Vec::new();
     let mut conflicts = Vec::new();
@@ -189,8 +189,8 @@ fn process_version_range_helper(expr: &Expr<'_>) -> (PackageId, Vec<Range>) {
             (package_id, rs)
         }
         Expr::Or(lhs, rhs) => {
-            let (pid1, mut rs1) = process_version_range_helper(*lhs);
-            let (pid2, mut rs2) = process_version_range_helper(*rhs);
+            let (pid1, mut rs1) = process_version_range_helper(lhs);
+            let (pid2, mut rs2) = process_version_range_helper(rhs);
             assert_eq!(pid1, pid2);
             rs1.append(&mut rs2);
             (pid1, rs1)
@@ -201,13 +201,13 @@ fn process_version_range_helper(expr: &Expr<'_>) -> (PackageId, Vec<Range>) {
 }
 
 pub fn simple_solve(cfg: &Config, repo: &Repository, requirements: &RequirementSet) -> Res {
-    let ctx = Context::new(&cfg);
+    let ctx = Context::new(cfg);
     let solver = Solver::new_for_logic(&ctx, "QF_FD").unwrap();
     solver.set_params(&default_params(&ctx));
 
     let allocator = Bump::new();
 
-    let closure = find_closure(repo, (&requirements).into_iter())?;
+    let closure = find_closure(repo, requirements.into_iter())?;
 
     let mut assert_id = 0;
     let mut assertion_map = HashMap::new();

@@ -109,19 +109,10 @@ impl Requirement {
     }
 }
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Eq, PartialEq, Debug, Default)]
 pub struct RequirementSet {
     pub dependencies: Vec<Requirement>,
     pub conflicts: Vec<Requirement>,
-}
-
-impl Default for RequirementSet {
-    fn default() -> Self {
-        Self {
-            dependencies: Vec::new(),
-            conflicts: Vec::new(),
-        }
-    }
 }
 
 impl IntoIterator for RequirementSet {
@@ -129,9 +120,7 @@ impl IntoIterator for RequirementSet {
     type IntoIter = Chain<vec::IntoIter<Self::Item>, vec::IntoIter<Self::Item>>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.dependencies
-            .into_iter()
-            .chain(self.conflicts.into_iter())
+        self.dependencies.into_iter().chain(self.conflicts)
     }
 }
 
@@ -140,9 +129,7 @@ impl<'a> IntoIterator for &'a RequirementSet {
     type IntoIter = Chain<slice::Iter<'a, Requirement>, slice::Iter<'a, Requirement>>;
 
     fn into_iter(self) -> Self::IntoIter {
-        (&self.dependencies)
-            .into_iter()
-            .chain((&self.conflicts).into_iter())
+        self.dependencies.iter().chain(&self.conflicts)
     }
 }
 
