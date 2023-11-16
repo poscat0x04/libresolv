@@ -1,7 +1,6 @@
 pub mod expr;
 
 use intmap::IntMap;
-use snafu::{prelude::*, Backtrace};
 use std::{fmt::Display, iter::Chain, slice, vec};
 use vec1::Vec1;
 
@@ -234,12 +233,9 @@ impl Repository {
     }
 }
 
-#[derive(Debug, Snafu)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum ResolutionError {
-    #[snafu(display("Illegal index: Index {index} is out of bound"))]
-    IllegalIndex { index: Index, backtrace: Backtrace },
-    #[snafu(display("Timeout during dependency resolution"))]
-    TimeOut { backtrace: Backtrace },
+    TimeOut,
 }
 
 #[derive(Eq, PartialEq, Debug)]

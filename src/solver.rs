@@ -13,7 +13,6 @@ use crate::{
 
 use bumpalo::Bump;
 use intmap::IntMap;
-use snafu::{Backtrace, GenerateImplicitData};
 use std::collections::HashMap;
 use tinyset::SetU32;
 use vec1::Vec1;
@@ -215,7 +214,7 @@ pub fn simple_solve(repo: &Repository, requirements: &RequirementSet) -> Res {
 
     let allocator = Bump::new();
 
-    let closure = find_closure(repo, requirements.into_iter())?;
+    let closure = find_closure(repo, requirements.into_iter());
 
     let mut assert_id = 0;
     let mut assertion_map = HashMap::new();
@@ -249,9 +248,7 @@ pub fn simple_solve(repo: &Repository, requirements: &RequirementSet) -> Res {
             let core = process_unsat_core(repo, core_assertions);
             Ok(ResolutionResult::UnsatWithCore { core })
         }
-        z3::SatResult::Unknown => Err(ResolutionError::TimeOut {
-            backtrace: Backtrace::generate(),
-        }),
+        z3::SatResult::Unknown => Err(ResolutionError::TimeOut),
         z3::SatResult::Sat => {
             let model = solver
                 .get_model()
@@ -273,7 +270,7 @@ pub fn optimize_newest(repo: &Repository, requirements: &RequirementSet) -> Res 
 
     let allocator = Bump::new();
 
-    let closure = find_closure(repo, requirements.into_iter())?;
+    let closure = find_closure(repo, requirements.into_iter());
 
     let package_pairs = closure
         .iter()
@@ -299,9 +296,7 @@ pub fn optimize_newest(repo: &Repository, requirements: &RequirementSet) -> Res 
     match solver.check(&[]) {
         // TODO: unsat core generation when upstream adds support for it
         z3::SatResult::Unsat => Ok(ResolutionResult::Unsat),
-        z3::SatResult::Unknown => Err(ResolutionError::TimeOut {
-            backtrace: Backtrace::generate(),
-        }),
+        z3::SatResult::Unknown => Err(ResolutionError::TimeOut),
         z3::SatResult::Sat => {
             let model = solver
                 .get_model()
@@ -323,7 +318,7 @@ pub fn optimize_minimal(repo: &Repository, requirements: &RequirementSet) -> Res
 
     let allocator = Bump::new();
 
-    let closure = find_closure(repo, requirements.into_iter())?;
+    let closure = find_closure(repo, requirements.into_iter());
 
     let metric = installed_packages(&ctx, closure.iter());
 
@@ -345,9 +340,7 @@ pub fn optimize_minimal(repo: &Repository, requirements: &RequirementSet) -> Res
     match solver.check(&[]) {
         // TODO: unsat core generation when upstream adds support for it
         z3::SatResult::Unsat => Ok(ResolutionResult::Unsat),
-        z3::SatResult::Unknown => Err(ResolutionError::TimeOut {
-            backtrace: Backtrace::generate(),
-        }),
+        z3::SatResult::Unknown => Err(ResolutionError::TimeOut),
         z3::SatResult::Sat => {
             let model = solver
                 .get_model()
@@ -384,7 +377,7 @@ pub fn parallel_optimize_with<T: Ord>(
     };
     add_all_constraints(
         &allocator,
-        &ctx,
+        ctx,
         repo,
         closure.iter(),
         requirements,
@@ -411,9 +404,7 @@ pub fn parallel_optimize_with<T: Ord>(
             let core = process_unsat_core(repo, core_assertions);
             Ok(ResolutionResult::UnsatWithCore { core })
         }
-        z3::SatResult::Unknown => Err(ResolutionError::TimeOut {
-            backtrace: Backtrace::generate(),
-        }),
+        z3::SatResult::Unknown => Err(ResolutionError::TimeOut),
         z3::SatResult::Sat => {
             let mut models = Vec::new();
             let cont = |model| models.push(model);
@@ -433,7 +424,7 @@ pub fn parallel_optimize_with<T: Ord>(
 }
 
 pub fn parallel_optimize_newest(repo: &Repository, requirements: &RequirementSet) -> Res {
-    let closure = find_closure(repo, requirements.into_iter())?;
+    let closure = find_closure(repo, requirements.into_iter());
     let package_pairs = closure
         .iter()
         .map(|pid| (pid, repo.newest_ver_of_unchecked(pid)));
@@ -451,7 +442,7 @@ pub fn parallel_optimize_newest(repo: &Repository, requirements: &RequirementSet
 }
 
 pub fn parallel_optimize_minimal(repo: &Repository, requirements: &RequirementSet) -> Res {
-    let closure = find_closure(repo, requirements.into_iter())?;
+    let closure = find_closure(repo, requirements.into_iter());
     let package_pairs = closure
         .iter()
         .map(|pid| (pid, repo.newest_ver_of_unchecked(pid)));

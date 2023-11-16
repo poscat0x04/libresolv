@@ -3,43 +3,34 @@ use crate::types::*;
 use crate::utils::merge_and_sort_ranges;
 use crate::z3_helpers::zero;
 use bumpalo::Bump;
-use snafu::{Backtrace, GenerateImplicitData};
 use tinyset::SetU32;
 use z3::ast::{Ast, Bool, Int};
 use z3::Context;
 
-pub fn find_closure<'a, T>(repo: &'a Repository, iter: T) -> Result<SetU32, ResolutionError>
+pub fn find_closure<'a, T>(repo: &'a Repository, iter: T) -> SetU32
 where
     T: Iterator<Item = &'a Requirement>,
 {
-    fn go<'a, 'b, T>(
-        repo: &'a Repository,
-        iter: T,
-        acc: &'b mut SetU32,
-    ) -> Result<(), ResolutionError>
+    fn go<'a, 'b, T>(repo: &'a Repository, iter: T, acc: &'b mut SetU32)
     where
         T: Iterator<Item = &'a Requirement>,
     {
         for req in iter {
             let not_present = acc.insert(req.package);
             if not_present {
-                let package = repo.packages.get(req.package as usize).ok_or_else(|| {
-                    ResolutionError::IllegalIndex {
-                        index: req.package,
-                        backtrace: Backtrace::generate(),
-                    }
-                })?;
+                let package = repo.packages.get(req.package as usize).unwrap_or_else(|| {
+                    panic!("Illegal index: index {} is out of bound", req.package)
+                });
                 for ver in &package.versions {
-                    go(repo, (&ver.requirements).into_iter(), acc)?;
+                    go(repo, (&ver.requirements).into_iter(), acc);
                 }
             }
         }
-        Ok(())
     }
 
     let mut s = SetU32::new();
-    go(repo, iter, &mut s)?;
-    Ok(s)
+    go(repo, iter, &mut s);
+    s
 }
 
 pub trait AsConstraints {
