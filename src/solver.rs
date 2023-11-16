@@ -265,7 +265,7 @@ pub fn simple_solve(repo: &Repository, requirements: &RequirementSet) -> Res {
 }
 
 pub fn optimize_newest(repo: &Repository, requirements: &RequirementSet) -> Res {
-    let mut cfg = default_config();
+    let cfg = default_config();
     let ctx = Context::new(&cfg);
     let solver = Optimize::new(&ctx);
 
@@ -315,7 +315,7 @@ pub fn optimize_newest(repo: &Repository, requirements: &RequirementSet) -> Res 
 }
 
 pub fn optimize_minimal(repo: &Repository, requirements: &RequirementSet) -> Res {
-    let mut cfg = default_config();
+    let cfg = default_config();
     let ctx = Context::new(&cfg);
     let solver = Optimize::new(&ctx);
 
@@ -367,15 +367,15 @@ pub fn parallel_optimize_with<T: Ord>(
     closure: SetU32,
     eval: impl Fn(&Model) -> T,
 ) -> Res {
-    let solver = Solver::new_for_logic(&ctx, "QF_FD").unwrap();
-    solver.set_params(&default_params(&ctx));
+    let solver = Solver::new_for_logic(ctx, "QF_FD").unwrap();
+    solver.set_params(&default_params(ctx));
 
     let allocator = Bump::new();
 
     let mut assert_id = 0;
     let mut assertion_map = HashMap::new();
     let expr_cont = |expr: Bool, sym_expr| {
-        let assert_var = Bool::new_const(&ctx, assert_id);
+        let assert_var = Bool::new_const(ctx, assert_id);
         solver.assert_and_track(&expr.simplify(), &assert_var);
         assertion_map.insert(assert_var, sym_expr);
         assert_id += 1;
@@ -391,7 +391,7 @@ pub fn parallel_optimize_with<T: Ord>(
 
     let vars = closure
         .iter()
-        .map(|pid| Int::new_const(&ctx, pid))
+        .map(|pid| Int::new_const(ctx, pid))
         .collect::<Vec<_>>();
 
     match solver.check() {
@@ -421,7 +421,7 @@ pub fn parallel_optimize_with<T: Ord>(
             let plans_v = iter_max_map(
                 models.into_iter(),
                 |model| eval(model),
-                |model| plan_from_model(&ctx, model, closure.iter()),
+                |model| plan_from_model(ctx, model, closure.iter()),
             );
 
             let plans = Vec1::try_from(plans_v).expect("Impossible: no plans despite satisfiable");
@@ -469,9 +469,7 @@ pub fn parallel_optimize_minimal(repo: &Repository, requirements: &RequirementSe
 #[cfg(test)]
 mod test {
     use crate::{
-        solver::{
-            optimize_minimal, optimize_newest, parallel_optimize_minimal, parallel_optimize_newest,
-        },
+        solver::{parallel_optimize_minimal, parallel_optimize_newest},
         types::{Package, PackageVer, Range, Repository, Requirement, RequirementSet},
         z3_helpers::set_global_params,
     };
