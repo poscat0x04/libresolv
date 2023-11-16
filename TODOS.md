@@ -7,7 +7,7 @@ Ordered by priority (descending).
 - [x] Optimizing dependency resolution (optimizing for newest versions of packages)
 - [x] Optimizing dependency resolution (optimizing for minimal number of packages)
 - [ ] Repository generation and serialization
-- [ ] Parallel resolution
+- [x] Parallel resolution
 - [ ] High-level API
 
 ## enhancements
