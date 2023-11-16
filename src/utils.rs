@@ -4,6 +4,7 @@ use std::{
 };
 
 use itertools::Itertools;
+use tinyset::SetU32;
 
 use crate::types::*;
 
@@ -75,6 +76,30 @@ pub fn merge_and_sort_ranges(ranges: &Vec<Range>) -> Box<dyn Iterator<Item = Ran
     }))
 }
 
+pub fn iter_max_map<T, V: Ord, W>(
+    iter: impl Iterator<Item = T>,
+    eval: impl Fn(&T) -> V,
+    f: impl Fn(T) -> W,
+) -> Vec<W> {
+    let mut cur = None;
+    let mut v = Vec::new();
+    for i in iter {
+        if let Some(ref c) = cur {
+            let e = eval(&i);
+            if c == &e {
+                v.push(f(i))
+            } else if c < &e {
+                cur = Some(e);
+                v.clear();
+                v.push(f(i))
+            }
+        } else {
+            cur = Some(eval(&i));
+            v.push(f(i));
+        }
+    }
+    v
+}
 #[cfg(test)]
 mod test {
     use crate::utils::{merge_insert, ISet};

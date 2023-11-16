@@ -1,6 +1,7 @@
 use crate::types::*;
 use z3::ast::{Ast, Int};
-use z3::{set_global_param, Config, Context, Params};
+use z3::SatResult::Sat;
+use z3::{set_global_param, Config, Context, Model, Params, Solver};
 
 pub fn set_global_params() {
     set_global_param("unsat_core", "true");
@@ -41,10 +42,11 @@ pub fn sgn<'a>(ctx: &'a Context, a: Int<'a>) -> Int<'a> {
     )
 }
 
-// the taxicab distance of all installed from the newest versions, useful as an optimization metric
+// the expression representing the taxicab distance of all installed from the newest versions,
+// useful as an optimization metric
 pub fn distance_from_newest(
     ctx: &Context,
-    iter: impl IntoIterator<Item = (PackageId, Version)>,
+    iter: impl Iterator<Item = (PackageId, Version)>,
 ) -> Int {
     let mut expr = zero(ctx);
     for (pid, max_ver) in iter {
@@ -56,13 +58,86 @@ pub fn distance_from_newest(
     expr
 }
 
-// the number of packages installed, useful as an optimization metric
-pub fn installed_packages(ctx: &Context, pids: impl IntoIterator<Item = PackageId>) -> Int {
+// the expression representing the number of packages installed, useful as an optimization metric
+pub fn installed_packages(ctx: &Context, pids: impl Iterator<Item = PackageId>) -> Int {
     let mut expr = zero(ctx);
     for pid in pids {
         expr += sgn(ctx, Int::new_const(ctx, pid));
     }
     expr
+}
+
+pub fn eval_int_expr_in_model(model: &Model, expr: &Int) -> u64 {
+    let eval_result = model
+        .eval(expr, false)
+        .unwrap_or_else(|| panic!("Impossible: failed to evaluate expression {expr} in model"));
+    eval_result
+        .as_u64()
+        .unwrap_or_else(|| panic!("Impossible: failed to convert eval result {eval_result} to u64"))
+}
+
+// enumerate all models.
+pub fn enumerate_models<'a, T: Ast<'a>>(
+    solver: &'a Solver,
+    vars: impl Iterator<Item = T> + Clone,
+    mut cont: impl FnMut(Model<'a>),
+) {
+    fn block_var<'a, T: Ast<'a>>(solver: &'a Solver, model: &Model<'a>, var: &T) {
+        let assertion = var
+            ._eq(&model.eval(var, false).unwrap_or_else(|| {
+                panic!("unable to find an interpretation for variable {var:?} in model")
+            }))
+            .not();
+        solver.assert(&assertion);
+    }
+
+    fn fix_var<'a, T: Ast<'a>>(solver: &'a Solver, model: &Model<'a>, var: &T) {
+        let assertion = var._eq(&model.eval(var, false).unwrap_or_else(|| {
+            panic!("unable to find an interpretation for variable {var:?} in model",)
+        }));
+        solver.assert(&assertion);
+    }
+
+    fn get_model<'a>(solver: &'a Solver) -> Model<'a> {
+        solver
+            .get_model()
+            .expect("Impossible: failed to get a model despite being satisifable")
+    }
+
+    // model enumeration: we use the method described in https://stackoverflow.com/questions/11867611/z3py-checking-all-solutions-for-equation
+    // to reuse each learnt lemma as much as possible
+    //
+    // we first first try to find a model, if this fails than the theory is unsatisfiable and the
+    // enumeration is complete.
+    // then for all the variables in our theory (which is { "k!i" | i in "closure of package" }),
+    // we pick a variable to be enumerated first, then we fix all other variables to their interpretations
+    // in this model, and enumerate all possible interpretations of this specific variable (by keeping
+    // adding assertions blocking enumerated values), after we've hit an "unsat", we backtrack, pop out
+    // all the assertions created during enumeration, and the assertion fixing the second variable, instead
+    // we add an assertion blocking the second variable, tries to find a new model, then we fix the second
+    // variable, repeat the enumeration step for the first variable, and so on to enumerate the scecond variable,
+    // after that we backtrack to the third variable, and fourth... until all the variable has been enumerated.
+    fn go<'a, T: Ast<'a>>(
+        solver: &'a Solver,
+        cont: &mut impl FnMut(Model<'a>),
+        mut vars: impl Iterator<Item = T> + Clone,
+    ) {
+        if let Some(var) = vars.next() {
+            solver.push();
+            while solver.check() == Sat {
+                let model = get_model(solver);
+                solver.push();
+                fix_var(solver, &model, &var);
+                go(solver, cont, vars.clone());
+                solver.pop(1);
+                block_var(solver, &model, &var);
+            }
+            solver.pop(1);
+        } else if solver.check() == Sat {
+            cont(get_model(solver));
+        }
+    }
+    go(solver, &mut cont, vars);
 }
 
 #[cfg(test)]

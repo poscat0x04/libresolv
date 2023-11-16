@@ -1,20 +1,25 @@
-use std::collections::HashMap;
-
 use crate::{
     constraints::{add_all_constraints, find_closure},
     types::{
         expr::{AtomicExpr, Expr},
         *,
     },
-    z3_helpers::{default_config, default_params, distance_from_newest, installed_packages},
+    utils::iter_max_map,
+    z3_helpers::{
+        default_config, default_params, distance_from_newest, enumerate_models,
+        eval_int_expr_in_model, installed_packages,
+    },
 };
+
 use bumpalo::Bump;
 use intmap::IntMap;
 use snafu::{Backtrace, GenerateImplicitData};
+use std::collections::HashMap;
 use tinyset::SetU32;
+use vec1::Vec1;
 use z3::{
     ast::{Ast, Bool, Int},
-    Config, Context, Model, Optimize, Solver,
+    Context, Model, Optimize, Solver,
 };
 
 fn plan_from_model(ctx: &Context, model: Model, pids: impl Iterator<Item = PackageId>) -> Plan {
@@ -48,8 +53,8 @@ fn plan_from_model(ctx: &Context, model: Model, pids: impl Iterator<Item = Packa
 
         if !interp_not_u64.is_empty() {
             panic_msg.push_str(
-                        "The following packages have an interpretation but the value cannot fit in a u64:\n",
-                    );
+                "The following packages have an interpretation but the value cannot fit in a u64:\n",
+            );
             panic_msg.push_str(&format!("  {interp_not_u64:?}"))
         }
         panic!("{panic_msg}");
@@ -234,8 +239,8 @@ pub fn simple_solve(repo: &Repository, requirements: &RequirementSet) -> Res {
             for var in core_vars {
                 let assertion = assertion_map.get(&var).unwrap_or_else(|| {
                     panic!(
-                    "Impossible: unable to find the assertion tracked by the boolean variable {var} in the assertion map"
-                )
+                        "Impossible: unable to find the assertion tracked by the boolean variable {var} in the assertion map"
+                    )
                 });
                 core_assertions.push(assertion);
             }
@@ -252,7 +257,9 @@ pub fn simple_solve(repo: &Repository, requirements: &RequirementSet) -> Res {
 
             let plan = plan_from_model(&ctx, model, closure.iter());
 
-            Ok(ResolutionResult::Sat { plan })
+            Ok(ResolutionResult::Sat {
+                plans: Vec1::new(plan),
+            })
         }
     }
 }
@@ -288,6 +295,7 @@ pub fn optimize_newest(repo: &Repository, requirements: &RequirementSet) -> Res 
     solver.minimize(&metric);
 
     match solver.check(&[]) {
+        // TODO: unsat core generation when upstream adds support for it
         z3::SatResult::Unsat => Ok(ResolutionResult::Unsat),
         z3::SatResult::Unknown => Err(ResolutionError::TimeOut {
             backtrace: Backtrace::generate(),
@@ -299,7 +307,9 @@ pub fn optimize_newest(repo: &Repository, requirements: &RequirementSet) -> Res 
 
             let plan = plan_from_model(&ctx, model, closure.iter());
 
-            Ok(ResolutionResult::Sat { plan })
+            Ok(ResolutionResult::Sat {
+                plans: Vec1::new(plan),
+            })
         }
     }
 }
@@ -331,6 +341,7 @@ pub fn optimize_minimal(repo: &Repository, requirements: &RequirementSet) -> Res
     solver.minimize(&metric);
 
     match solver.check(&[]) {
+        // TODO: unsat core generation when upstream adds support for it
         z3::SatResult::Unsat => Ok(ResolutionResult::Unsat),
         z3::SatResult::Unknown => Err(ResolutionError::TimeOut {
             backtrace: Backtrace::generate(),
@@ -342,31 +353,125 @@ pub fn optimize_minimal(repo: &Repository, requirements: &RequirementSet) -> Res
 
             let plan = plan_from_model(&ctx, model, closure.iter());
 
-            Ok(ResolutionResult::Sat { plan })
+            Ok(ResolutionResult::Sat {
+                plans: Vec1::new(plan),
+            })
         }
     }
 }
 
-pub fn parallel_optimize_newest(
-    cfg: &Config,
+pub fn parallel_optimize_with<T: Ord>(
     repo: &Repository,
-    requirement: &RequirementSet,
+    requirements: &RequirementSet,
+    ctx: &Context,
+    closure: SetU32,
+    eval: impl Fn(&Model) -> T,
 ) -> Res {
-    todo!()
+    let solver = Solver::new_for_logic(&ctx, "QF_FD").unwrap();
+    solver.set_params(&default_params(&ctx));
+
+    let allocator = Bump::new();
+
+    let mut assert_id = 0;
+    let mut assertion_map = HashMap::new();
+    let expr_cont = |expr: Bool, sym_expr| {
+        let assert_var = Bool::new_const(&ctx, assert_id);
+        solver.assert_and_track(&expr.simplify(), &assert_var);
+        assertion_map.insert(assert_var, sym_expr);
+        assert_id += 1;
+    };
+    add_all_constraints(
+        &allocator,
+        &ctx,
+        repo,
+        closure.iter(),
+        requirements,
+        expr_cont,
+    );
+
+    let vars = closure
+        .iter()
+        .map(|pid| Int::new_const(&ctx, pid))
+        .collect::<Vec<_>>();
+
+    match solver.check() {
+        z3::SatResult::Unsat => {
+            let core_vars = solver.get_unsat_core();
+            let mut core_assertions = Vec::new();
+            for var in core_vars {
+                let assertion = assertion_map.get(&var).unwrap_or_else(|| {
+                    panic!(
+                        "Impossible: unable to find the assertion tracked by the boolean variable {var} in the assertion map"
+                    )
+                });
+                core_assertions.push(assertion);
+            }
+            let core = process_unsat_core(repo, core_assertions);
+            Ok(ResolutionResult::UnsatWithCore { core })
+        }
+        z3::SatResult::Unknown => Err(ResolutionError::TimeOut {
+            backtrace: Backtrace::generate(),
+        }),
+        z3::SatResult::Sat => {
+            let mut models = Vec::new();
+            let cont = |model| models.push(model);
+
+            enumerate_models(&solver, vars.clone().into_iter(), cont);
+
+            let plans_v = iter_max_map(
+                models.into_iter(),
+                |model| eval(model),
+                |model| plan_from_model(&ctx, model, closure.iter()),
+            );
+
+            let plans = Vec1::try_from(plans_v).expect("Impossible: no plans despite satisfiable");
+            Ok(ResolutionResult::Sat { plans })
+        }
+    }
 }
 
-pub fn parallel_optimize_minimal(
-    cfg: &Config,
-    repo: &Repository,
-    requirement: &RequirementSet,
-) -> Res {
-    todo!()
+pub fn parallel_optimize_newest(repo: &Repository, requirements: &RequirementSet) -> Res {
+    let closure = find_closure(repo, requirements.into_iter())?;
+    let package_pairs = closure
+        .iter()
+        .map(|pid| (pid, repo.newest_ver_of_unchecked(pid)));
+
+    let cfg = default_config();
+    let ctx = Context::new(&cfg);
+
+    let distance_from_newest_expr = distance_from_newest(&ctx, package_pairs);
+    let installed_packages_expr = installed_packages(&ctx, closure.iter());
+    parallel_optimize_with(repo, requirements, &ctx, closure, |model| {
+        let distance_from_newest = eval_int_expr_in_model(model, &distance_from_newest_expr);
+        let installed_packages = eval_int_expr_in_model(model, &installed_packages_expr);
+        (distance_from_newest, installed_packages)
+    })
+}
+
+pub fn parallel_optimize_minimal(repo: &Repository, requirements: &RequirementSet) -> Res {
+    let closure = find_closure(repo, requirements.into_iter())?;
+    let package_pairs = closure
+        .iter()
+        .map(|pid| (pid, repo.newest_ver_of_unchecked(pid)));
+
+    let cfg = default_config();
+    let ctx = Context::new(&cfg);
+
+    let distance_from_newest_expr = distance_from_newest(&ctx, package_pairs);
+    let installed_packages_expr = installed_packages(&ctx, closure.iter());
+    parallel_optimize_with(repo, requirements, &ctx, closure, |model| {
+        let distance_from_newest = eval_int_expr_in_model(model, &distance_from_newest_expr);
+        let installed_packages = eval_int_expr_in_model(model, &installed_packages_expr);
+        (installed_packages, distance_from_newest)
+    })
 }
 
 #[cfg(test)]
 mod test {
     use crate::{
-        solver::{optimize_minimal, optimize_newest},
+        solver::{
+            optimize_minimal, optimize_newest, parallel_optimize_minimal, parallel_optimize_newest,
+        },
         types::{Package, PackageVer, Range, Repository, Requirement, RequirementSet},
         z3_helpers::set_global_params,
     };
@@ -429,9 +534,9 @@ mod test {
         set_global_params();
         let mut r = simple_solve(&repo, &req_set).unwrap();
         println!("{r:?}");
-        r = optimize_newest(&repo, &req_set).unwrap();
+        r = parallel_optimize_newest(&repo, &req_set).unwrap();
         println!("{r:?}");
-        r = optimize_minimal(&repo, &req_set).unwrap();
+        r = parallel_optimize_minimal(&repo, &req_set).unwrap();
         println!("{r:?}");
     }
 }

@@ -3,6 +3,7 @@ pub mod expr;
 use intmap::IntMap;
 use snafu::{prelude::*, Backtrace};
 use std::{fmt::Display, iter::Chain, slice, vec};
+use vec1::Vec1;
 
 // We use (initial segments of) positive integers to represent versions since the
 // set of known versions are necessarily finite and hence are orderisomorphic
@@ -251,7 +252,7 @@ pub struct ConstraintSet {
 pub enum ResolutionResult {
     Unsat,
     UnsatWithCore { core: ConstraintSet },
-    Sat { plan: Plan },
+    Sat { plans: Vec1<Plan> },
 }
 
 pub type Res = Result<ResolutionResult, ResolutionError>;
