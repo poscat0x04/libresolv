@@ -155,54 +155,56 @@ fn process_unsat_core(repo: &Repository, core_assertions: Vec<&Expr<'_>>) -> Con
 }
 
 fn process_version_range(expr: &Expr<'_>) -> Requirement {
-    let (pid, ranges) = process_version_range_helper(expr);
-    Requirement::new(pid, ranges)
-}
-
-fn process_version_range_helper(expr: &Expr<'_>) -> (PackageId, Vec<Range>) {
-    match expr {
-        Expr::Atom(AtomicExpr::VerEq { pid, version }) => (*pid, vec![Range::point(*version)]),
-        Expr::And(lhs, rhs) => {
-            let mut lb = 0;
-            let mut ub = 0;
-            let package_id;
-            match lhs {
-                Expr::Atom(AtomicExpr::VerGE { pid, version }) => {
-                    lb = *version;
-                    package_id = *pid;
+    fn go(expr: &Expr<'_>) -> (PackageId, Vec<Range>) {
+        match expr {
+            Expr::Atom(AtomicExpr::VerEq { pid, version }) => (*pid, vec![Range::point(*version)]),
+            Expr::And(lhs, rhs) => {
+                let mut lb = 0;
+                let mut ub = 0;
+                let package_id;
+                match lhs {
+                    Expr::Atom(AtomicExpr::VerGE { pid, version }) => {
+                        lb = *version;
+                        package_id = *pid;
+                    }
+                    Expr::Atom(AtomicExpr::VerLE { pid, version }) => {
+                        ub = *version;
+                        package_id = *pid;
+                    }
+                    _ => panic!("Impossible: unknown lhs {lhs} of the expression {expr}"),
                 }
-                Expr::Atom(AtomicExpr::VerLE { pid, version }) => {
-                    ub = *version;
-                    package_id = *pid;
+                match rhs {
+                    Expr::Atom(AtomicExpr::VerGE { pid, version }) => {
+                        lb = *version;
+                        assert_eq!(package_id, *pid);
+                    }
+                    Expr::Atom(AtomicExpr::VerLE { pid, version }) => {
+                        ub = *version;
+                        assert_eq!(package_id, *pid);
+                    }
+                    _ => panic!("Impossible: unknown rhs {rhs} of the expression {expr}"),
                 }
-                _ => panic!("Impossible: unknown lhs {lhs} of the expression {expr}"),
+                let rs = vec![Range::interval(lb, ub).unwrap_or_else(|| {
+                    panic!("Impossible: lower bound is bigger than upper bound in expr {expr}")
+                })];
+                (package_id, rs)
             }
-            match rhs {
-                Expr::Atom(AtomicExpr::VerGE { pid, version }) => {
-                    lb = *version;
-                    assert_eq!(package_id, *pid);
-                }
-                Expr::Atom(AtomicExpr::VerLE { pid, version }) => {
-                    ub = *version;
-                    assert_eq!(package_id, *pid);
-                }
-                _ => panic!("Impossible: unknown rhs {rhs} of the expression {expr}"),
+            Expr::Or(lhs, rhs) => {
+                let (pid1, mut rs1) = go(lhs);
+                let (pid2, mut rs2) = go(rhs);
+                assert_eq!(pid1, pid2);
+                rs1.append(&mut rs2);
+                (pid1, rs1)
             }
-            let rs = vec![Range::interval(lb, ub).unwrap_or_else(|| {
-                panic!("Impossible: lower bound is bigger than upper bound in expr {expr}")
-            })];
-            (package_id, rs)
+            Expr::Not(Expr::Atom(AtomicExpr::VerEq { pid, version: 0 })) => {
+                (*pid, vec![Range::all()])
+            }
+            _ => panic!("Impossible: unknown expression {expr} for version range(s)"),
         }
-        Expr::Or(lhs, rhs) => {
-            let (pid1, mut rs1) = process_version_range_helper(lhs);
-            let (pid2, mut rs2) = process_version_range_helper(rhs);
-            assert_eq!(pid1, pid2);
-            rs1.append(&mut rs2);
-            (pid1, rs1)
-        }
-        Expr::Not(Expr::Atom(AtomicExpr::VerEq { pid, version: 0 })) => (*pid, vec![Range::all()]),
-        _ => panic!("Impossible: unknown expression {expr} for version range(s)"),
     }
+
+    let (pid, ranges) = go(expr);
+    Requirement::new(pid, ranges)
 }
 
 pub fn simple_solve(repo: &Repository, requirements: &RequirementSet) -> Res {

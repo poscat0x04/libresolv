@@ -12,34 +12,34 @@ pub fn find_closure<'a, T>(repo: &'a Repository, iter: T) -> Result<SetU32, Reso
 where
     T: Iterator<Item = &'a Requirement>,
 {
-    let mut s = SetU32::new();
-    find_closure_helper(repo, iter, &mut s)?;
-    Ok(s)
-}
-
-fn find_closure_helper<'a, 'b, T>(
-    repo: &'a Repository,
-    iter: T,
-    acc: &'b mut SetU32,
-) -> Result<(), ResolutionError>
-where
-    T: Iterator<Item = &'a Requirement>,
-{
-    for req in iter {
-        let not_present = acc.insert(req.package);
-        if not_present {
-            let package = repo.packages.get(req.package as usize).ok_or_else(|| {
-                ResolutionError::IllegalIndex {
-                    index: req.package,
-                    backtrace: Backtrace::generate(),
+    fn go<'a, 'b, T>(
+        repo: &'a Repository,
+        iter: T,
+        acc: &'b mut SetU32,
+    ) -> Result<(), ResolutionError>
+    where
+        T: Iterator<Item = &'a Requirement>,
+    {
+        for req in iter {
+            let not_present = acc.insert(req.package);
+            if not_present {
+                let package = repo.packages.get(req.package as usize).ok_or_else(|| {
+                    ResolutionError::IllegalIndex {
+                        index: req.package,
+                        backtrace: Backtrace::generate(),
+                    }
+                })?;
+                for ver in &package.versions {
+                    go(repo, (&ver.requirements).into_iter(), acc)?;
                 }
-            })?;
-            for ver in &package.versions {
-                find_closure_helper(repo, (&ver.requirements).into_iter(), acc)?;
             }
         }
+        Ok(())
     }
-    Ok(())
+
+    let mut s = SetU32::new();
+    go(repo, iter, &mut s)?;
+    Ok(s)
 }
 
 pub trait AsConstraints {
