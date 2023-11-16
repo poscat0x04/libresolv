@@ -1,10 +1,9 @@
 use std::{
-    cmp::{max, min},
+    cmp::{max, min, Ordering},
     iter::once,
 };
 
 use itertools::Itertools;
-use tinyset::SetU32;
 
 use crate::types::*;
 
@@ -81,17 +80,19 @@ pub fn iter_max_map<T, V: Ord, W>(
     eval: impl Fn(&T) -> V,
     f: impl Fn(T) -> W,
 ) -> Vec<W> {
-    let mut cur = None;
+    let mut cur: Option<V> = None;
     let mut v = Vec::new();
     for i in iter {
         if let Some(ref c) = cur {
             let e = eval(&i);
-            if c == &e {
-                v.push(f(i))
-            } else if c < &e {
-                cur = Some(e);
-                v.clear();
-                v.push(f(i))
+            match c.cmp(&e) {
+                Ordering::Equal => v.push(f(i)),
+                Ordering::Less => {
+                    cur = Some(e);
+                    v.clear();
+                    v.push(f(i))
+                }
+                _ => {}
             }
         } else {
             cur = Some(eval(&i));
