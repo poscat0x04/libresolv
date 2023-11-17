@@ -1,8 +1,12 @@
 pub mod expr;
 
 use intmap::IntMap;
+use pretty::{DocAllocator, DocBuilder, Pretty};
 use std::{fmt::Display, iter::Chain, slice, vec};
+use termcolor::ColorSpec;
 use vec1::Vec1;
+
+use crate::utils::{blue_text, green_text, red_text};
 
 // We use (initial segments of) positive integers to represent versions since the
 // set of known versions are necessarily finite and hence are orderisomorphic
@@ -60,24 +64,62 @@ impl Range {
     }
 }
 
+impl<'a, D, A> Pretty<'a, D, A> for Range
+where
+    D: DocAllocator<'a, A>,
+    A: 'a,
+{
+    fn pretty(self, allocator: &'a D) -> DocBuilder<'a, D, A> {
+        allocator.as_string(self)
+    }
+}
+
 #[derive(Eq, PartialEq, Debug)]
 pub struct Requirement {
     pub package: PackageId,
     pub versions: Vec<Range>,
 }
 
-impl Display for Requirement {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut iter = self.versions.iter();
-        if let Some(r) = iter.next() {
-            write!(f, "Ver({}) ∈ {r}", self.package)?;
-            for r in iter {
-                write!(f, " ∪ {r}")?;
-            }
-            Ok(())
-        } else {
-            write!(f, "Ver({}) = 0", self.package)
+impl<'a, D> Pretty<'a, D, ColorSpec> for Requirement
+where
+    D: DocAllocator<'a, ColorSpec>,
+    D::Doc: Clone,
+{
+    fn pretty(self, allocator: &'a D) -> DocBuilder<'a, D, ColorSpec> {
+        RequirementPretty {
+            req: self,
+            invert: false,
         }
+        .pretty(allocator)
+    }
+}
+
+#[derive(Eq, PartialEq, Debug)]
+struct RequirementPretty {
+    req: Requirement,
+    invert: bool,
+}
+
+impl<'a, D> Pretty<'a, D, ColorSpec> for RequirementPretty
+where
+    D: DocAllocator<'a, ColorSpec>,
+    D::Doc: Clone,
+{
+    fn pretty(self, allocator: &'a D) -> DocBuilder<'a, D, ColorSpec> {
+        allocator
+            .text(format!("Ver({})", self.req.package))
+            .annotate(blue_text())
+            + allocator.space()
+            + if self.invert {
+                allocator.text("∉").annotate(red_text())
+            } else {
+                allocator.text("∈").annotate(green_text())
+            }
+            + allocator.space()
+            + allocator
+                .intersperse(self.req.versions, allocator.text(" ∪") + allocator.line())
+                .align()
+                .group()
     }
 }
 
@@ -113,6 +155,24 @@ impl Requirement {
 pub struct RequirementSet {
     pub dependencies: Vec<Requirement>,
     pub conflicts: Vec<Requirement>,
+}
+
+impl<'a, D> Pretty<'a, D, ColorSpec> for RequirementSet
+where
+    D: DocAllocator<'a, ColorSpec>,
+    D::Doc: Clone,
+{
+    fn pretty(self, allocator: &'a D) -> DocBuilder<'a, D, ColorSpec> {
+        (allocator.intersperse(self.dependencies, allocator.hardline())
+            + allocator.hardline()
+            + allocator.intersperse(
+                self.conflicts
+                    .into_iter()
+                    .map(|req| RequirementPretty { req, invert: true }),
+                allocator.hardline(),
+            ))
+        .align()
+    }
 }
 
 impl IntoIterator for RequirementSet {
@@ -185,6 +245,16 @@ pub struct PackageVer {
     pub requirements: RequirementSet,
 }
 
+impl<'a, D> Pretty<'a, D, ColorSpec> for PackageVer
+where
+    D: DocAllocator<'a, ColorSpec>,
+    D::Doc: Clone,
+{
+    fn pretty(self, allocator: &'a D) -> DocBuilder<'a, D, ColorSpec> {
+        self.requirements.pretty(allocator)
+    }
+}
+
 impl PackageVer {
     pub fn deps(&self) -> impl Iterator<Item = &Requirement> {
         self.requirements.dependencies.iter()
@@ -195,10 +265,50 @@ impl PackageVer {
     }
 }
 
+struct PackageVerPretty {
+    ver: PackageVer,
+    ver_number: Version,
+}
+
+impl<'a, D> Pretty<'a, D, ColorSpec> for PackageVerPretty
+where
+    D: DocAllocator<'a, ColorSpec>,
+    D::Doc: Clone,
+{
+    fn pretty(self, allocator: &'a D) -> DocBuilder<'a, D, ColorSpec> {
+        (allocator.text(format!("Ver = {} ⇒", self.ver_number))
+            + allocator.hardline()
+            + self.ver.pretty(allocator).indent(2))
+        .align()
+    }
+}
+
 #[derive(Eq, PartialEq, Debug)]
 pub struct Package {
     pub id: PackageId,
     pub versions: Vec<PackageVer>,
+}
+
+impl<'a, D> Pretty<'a, D, ColorSpec> for Package
+where
+    D: DocAllocator<'a, ColorSpec>,
+    D::Doc: Clone,
+{
+    fn pretty(self, allocator: &'a D) -> DocBuilder<'a, D, ColorSpec> {
+        (allocator.text(format!("Package({}):", self.id))
+            + allocator.hardline()
+            + allocator
+                .intersperse(
+                    self.versions
+                        .into_iter()
+                        .zip(1..)
+                        .map(|(ver, ver_number)| PackageVerPretty { ver, ver_number }),
+                    allocator.hardline(),
+                )
+                .align()
+                .indent(2))
+        .align()
+    }
 }
 
 impl Package {
@@ -213,6 +323,18 @@ impl Package {
 
 pub struct Repository {
     pub packages: Vec<Package>,
+}
+
+impl<'a, D> Pretty<'a, D, ColorSpec> for Repository
+where
+    D: DocAllocator<'a, ColorSpec>,
+    D::Doc: Clone,
+{
+    fn pretty(self, allocator: &'a D) -> DocBuilder<'a, D, ColorSpec> {
+        allocator
+            .intersperse(self.packages, allocator.hardline())
+            .align()
+    }
 }
 
 impl Repository {
@@ -252,3 +374,29 @@ pub enum ResolutionResult {
 }
 
 pub type Res = Result<ResolutionResult, ResolutionError>;
+
+#[cfg(test)]
+mod test {
+    use crate::types::Requirement;
+
+    use super::{Range, RequirementSet};
+    use pretty::{Arena, Pretty};
+    use termcolor::{ColorChoice, StandardStream};
+
+    #[test]
+    fn test_version_pretty() {
+        let arena = Arena::new();
+        let req = Requirement {
+            package: 1,
+            versions: vec![
+                Range::interval_unchecked(1, 2),
+                Range::interval_unchecked(3, 4),
+                Range::interval_unchecked(5, 6),
+            ],
+        };
+        let reqs = RequirementSet::from_antidep(req);
+        let doc = reqs.pretty(&arena);
+        let stdout = StandardStream::stdout(ColorChoice::Auto);
+        doc.render_colored(20, stdout).unwrap()
+    }
+}
