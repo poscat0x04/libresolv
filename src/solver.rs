@@ -277,6 +277,7 @@ pub fn optimize_newest(repo: &Repository, requirements: &RequirementSet) -> Res 
         .map(|pid| (pid, repo.newest_ver_of_unchecked(pid)));
 
     let metric = distance_from_newest(&ctx, package_pairs);
+    let metric2 = installed_packages(&ctx, closure.iter());
 
     let mut assert_id = 0;
     let expr_cont = |expr: Bool, _sym_expr| {
@@ -292,6 +293,7 @@ pub fn optimize_newest(repo: &Repository, requirements: &RequirementSet) -> Res 
         expr_cont,
     );
     solver.minimize(&metric);
+    solver.minimize(&metric2);
 
     match solver.check(&[]) {
         // TODO: unsat core generation when upstream adds support for it
@@ -320,7 +322,12 @@ pub fn optimize_minimal(repo: &Repository, requirements: &RequirementSet) -> Res
 
     let closure = find_closure(repo, requirements.into_iter());
 
+    let package_pairs = closure
+        .iter()
+        .map(|pid| (pid, repo.newest_ver_of_unchecked(pid)));
+
     let metric = installed_packages(&ctx, closure.iter());
+    let metric2 = distance_from_newest(&ctx, package_pairs);
 
     let mut assert_id = 0;
     let expr_cont = |expr: Bool, _sym_expr| {
@@ -336,6 +343,7 @@ pub fn optimize_minimal(repo: &Repository, requirements: &RequirementSet) -> Res
         expr_cont,
     );
     solver.minimize(&metric);
+    solver.minimize(&metric2);
 
     match solver.check(&[]) {
         // TODO: unsat core generation when upstream adds support for it
