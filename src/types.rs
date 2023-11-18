@@ -266,7 +266,7 @@ impl PackageVer {
 }
 
 struct PackageVerPretty {
-    ver: PackageVer,
+    reqs: RequirementSet,
     ver_number: Version,
 }
 
@@ -278,7 +278,7 @@ where
     fn pretty(self, allocator: &'a D) -> DocBuilder<'a, D, ColorSpec> {
         (allocator.text(format!("Ver = {} ⇒", self.ver_number))
             + allocator.hardline()
-            + self.ver.pretty(allocator).indent(2))
+            + self.reqs.pretty(allocator).indent(2))
         .align()
     }
 }
@@ -302,7 +302,10 @@ where
                     self.versions
                         .into_iter()
                         .zip(1..)
-                        .map(|(ver, ver_number)| PackageVerPretty { ver, ver_number }),
+                        .map(|(ver, ver_number)| PackageVerPretty {
+                            reqs: ver.requirements,
+                            ver_number,
+                        }),
                     allocator.hardline(),
                 )
                 .align()
@@ -366,11 +369,86 @@ pub struct ConstraintSet {
     pub toplevel_reqs: RequirementSet,
 }
 
+impl<'a, D> Pretty<'a, D, ColorSpec> for ConstraintSet
+where
+    D: DocAllocator<'a, ColorSpec>,
+    D::Doc: Clone,
+{
+    fn pretty(self, allocator: &'a D) -> DocBuilder<'a, D, ColorSpec> {
+        let pkg_constraint_doc = {
+            let mut doc = allocator.nil();
+            let mut pkg_reqs = self.package_reqs.into_iter().collect::<Vec<_>>();
+            pkg_reqs.sort_by_key(|(pid, _)| *pid);
+            for (pid, reqs) in pkg_reqs {
+                let mut reqs = reqs.into_iter().collect::<Vec<_>>();
+                reqs.sort_by_key(|(version, _)| *version);
+                doc += allocator.text(format!("Package {pid}:"))
+                    + allocator.hardline()
+                    + allocator
+                        .intersperse(
+                            reqs.into_iter()
+                                .map(|(ver_number, req_set)| PackageVerPretty {
+                                    reqs: req_set,
+                                    ver_number,
+                                }),
+                            allocator.hardline(),
+                        )
+                        .align()
+                        .indent(2)
+            }
+            doc = doc.align();
+            doc
+        };
+        allocator.text("Top-level constraints:")
+            + self.toplevel_reqs.pretty(allocator).indent(2)
+            + allocator.hardline()
+            + allocator.text("Package constraints:")
+            + allocator.hardline()
+            + pkg_constraint_doc.indent(2)
+    }
+}
+
 #[derive(Eq, PartialEq, Debug)]
 pub enum ResolutionResult {
     Unsat,
     UnsatWithCore { core: ConstraintSet },
     Sat { plans: Vec1<Plan> },
+}
+
+impl<'a, D> Pretty<'a, D, ColorSpec> for ResolutionResult
+where
+    D: DocAllocator<'a, ColorSpec>,
+    D::Doc: Clone,
+{
+    fn pretty(self, allocator: &'a D) -> DocBuilder<'a, D, ColorSpec> {
+        match self {
+            Self::Unsat => allocator.text("Unsat"),
+            Self::UnsatWithCore { core } => {
+                allocator.text("Unsat, minimal unsatisifable core:")
+                    + allocator.hardline()
+                    + core.pretty(allocator)
+            }
+            Self::Sat { plans } => {
+                let mut doc = allocator
+                    .text("Satisifiable with the following (optimal) installation plan(s):")
+                    + allocator.hardline();
+                for (mut plan, index) in plans.into_iter().zip(1..) {
+                    plan.sort_by_key(|(pid, _)| *pid);
+                    doc += allocator.text(format!("{index}.")) + allocator.hardline();
+                    doc += allocator
+                        .intersperse(
+                            plan.into_iter().map(|(pid, version)| {
+                                allocator.text(format!("Ver({pid}) = {version}"))
+                            }),
+                            allocator.hardline(),
+                        )
+                        .align()
+                        .indent(2);
+                }
+                doc
+            }
+        }
+    }
 }
 
 pub type Res = Result<ResolutionResult, ResolutionError>;
