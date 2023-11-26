@@ -366,7 +366,7 @@ impl Repository {
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum ResolutionError {
-    TimeOut,
+    ResolutionFailure { reason: String },
 }
 
 #[derive(Eq, PartialEq, Debug, Clone)]

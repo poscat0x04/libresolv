@@ -248,7 +248,11 @@ pub fn simple_solve(repo: &Repository, requirements: &RequirementSet) -> Res {
             let core = process_unsat_core(repo, core_assertions);
             Ok(ResolutionResult::UnsatWithCore { core })
         }
-        z3::SatResult::Unknown => Err(ResolutionError::TimeOut),
+        z3::SatResult::Unknown => Err(ResolutionError::ResolutionFailure {
+            reason: solver
+                .get_reason_unknown()
+                .expect("Impossible: failed to obtain a reason"),
+        }),
         z3::SatResult::Sat => {
             let model = solver
                 .get_model()
@@ -298,7 +302,11 @@ pub fn optimize_newest(repo: &Repository, requirements: &RequirementSet) -> Res 
     match solver.check(&[]) {
         // TODO: unsat core generation when upstream adds support for it
         z3::SatResult::Unsat => Ok(ResolutionResult::Unsat),
-        z3::SatResult::Unknown => Err(ResolutionError::TimeOut),
+        z3::SatResult::Unknown => Err(ResolutionError::ResolutionFailure {
+            reason: solver
+                .get_reason_unknown()
+                .expect("Impossible: failed to obtain a reason"),
+        }),
         z3::SatResult::Sat => {
             let model = solver
                 .get_model()
@@ -348,7 +356,11 @@ pub fn optimize_minimal(repo: &Repository, requirements: &RequirementSet) -> Res
     match solver.check(&[]) {
         // TODO: unsat core generation when upstream adds support for it
         z3::SatResult::Unsat => Ok(ResolutionResult::Unsat),
-        z3::SatResult::Unknown => Err(ResolutionError::TimeOut),
+        z3::SatResult::Unknown => Err(ResolutionError::ResolutionFailure {
+            reason: solver
+                .get_reason_unknown()
+                .expect("Impossible: failed to obtain a reason"),
+        }),
         z3::SatResult::Sat => {
             let model = solver
                 .get_model()
@@ -411,7 +423,11 @@ fn parallel_optimize_with<T: Ord>(
             let core = process_unsat_core(repo, core_assertions);
             Ok(ResolutionResult::UnsatWithCore { core })
         }
-        z3::SatResult::Unknown => Err(ResolutionError::TimeOut),
+        z3::SatResult::Unknown => Err(ResolutionError::ResolutionFailure {
+            reason: solver
+                .get_reason_unknown()
+                .expect("Impossible: failed to obtain a reason"),
+        }),
         z3::SatResult::Sat => {
             let mut models = Vec::new();
             let cont = |model| models.push(model);
@@ -471,7 +487,7 @@ pub fn parallel_optimize_minimal(repo: &Repository, requirements: &RequirementSe
 #[cfg(test)]
 mod test {
     use crate::{
-        solver::{parallel_optimize_minimal, parallel_optimize_newest},
+        solver::{optimize_minimal, optimize_newest},
         types::{Package, PackageVer, Range, Repository, Requirement, RequirementSet},
         z3_helpers::set_global_params,
     };
@@ -534,9 +550,9 @@ mod test {
         set_global_params();
         let mut r = simple_solve(&repo, &req_set).unwrap();
         println!("{r:?}");
-        r = parallel_optimize_newest(&repo, &req_set).unwrap();
+        r = optimize_newest(&repo, &req_set).unwrap();
         println!("{r:?}");
-        r = parallel_optimize_minimal(&repo, &req_set).unwrap();
+        r = optimize_minimal(&repo, &req_set).unwrap();
         println!("{r:?}");
     }
 }
