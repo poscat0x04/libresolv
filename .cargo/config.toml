@@ -1,0 +1,2 @@
+[registries.gitea]
+index = "sparse+https://git.poscat.moe:8443/api/packages/poscat/cargo/"
