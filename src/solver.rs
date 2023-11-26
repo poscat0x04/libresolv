@@ -13,6 +13,7 @@ use crate::{
 
 use bumpalo::Bump;
 use intmap::IntMap;
+use itertools::Itertools;
 use std::collections::HashMap;
 use tinyset::SetU32;
 use vec1::Vec1;
@@ -267,7 +268,11 @@ pub fn simple_solve(repo: &Repository, requirements: &RequirementSet) -> Res {
     }
 }
 
-pub fn optimize_newest(repo: &Repository, requirements: &RequirementSet) -> Res {
+pub fn optimize_with(
+    repo: &Repository,
+    requirements: &RequirementSet,
+    gen_metric: impl FnOnce(&Context, Vec<(u32, u64)>, SetU32) -> Vec<Int>,
+) -> Res {
     let cfg = default_config();
     let ctx = Context::new(&cfg);
     let solver = Optimize::new(&ctx);
@@ -278,10 +283,10 @@ pub fn optimize_newest(repo: &Repository, requirements: &RequirementSet) -> Res 
 
     let package_pairs = closure
         .iter()
-        .map(|pid| (pid, repo.newest_ver_of_unchecked(pid)));
+        .map(|pid| (pid, repo.newest_ver_of_unchecked(pid)))
+        .collect_vec();
 
-    let metric = distance_from_newest(&ctx, package_pairs);
-    let metric2 = installed_packages(&ctx, closure.iter());
+    let metrics = gen_metric(&ctx, package_pairs, closure.clone());
 
     let mut assert_id = 0;
     let expr_cont = |expr: Bool, _sym_expr| {
@@ -296,8 +301,10 @@ pub fn optimize_newest(repo: &Repository, requirements: &RequirementSet) -> Res 
         requirements,
         expr_cont,
     );
-    solver.minimize(&metric);
-    solver.minimize(&metric2);
+
+    for metric in metrics {
+        solver.minimize(&metric);
+    }
 
     match solver.check(&[]) {
         // TODO: unsat core generation when upstream adds support for it
@@ -321,58 +328,20 @@ pub fn optimize_newest(repo: &Repository, requirements: &RequirementSet) -> Res 
     }
 }
 
+pub fn optimize_newest(repo: &Repository, requirements: &RequirementSet) -> Res {
+    optimize_with(repo, requirements, |ctx, package_pairs, closure| {
+        let metric = distance_from_newest(ctx, package_pairs.into_iter());
+        let metric2 = installed_packages(ctx, closure.iter());
+        vec![metric, metric2]
+    })
+}
+
 pub fn optimize_minimal(repo: &Repository, requirements: &RequirementSet) -> Res {
-    let cfg = default_config();
-    let ctx = Context::new(&cfg);
-    let solver = Optimize::new(&ctx);
-
-    let allocator = Bump::new();
-
-    let closure = find_closure(repo, requirements.into_iter());
-
-    let package_pairs = closure
-        .iter()
-        .map(|pid| (pid, repo.newest_ver_of_unchecked(pid)));
-
-    let metric = installed_packages(&ctx, closure.iter());
-    let metric2 = distance_from_newest(&ctx, package_pairs);
-
-    let mut assert_id = 0;
-    let expr_cont = |expr: Bool, _sym_expr| {
-        solver.assert(&expr.simplify());
-        assert_id += 1;
-    };
-    add_all_constraints(
-        &allocator,
-        &ctx,
-        repo,
-        closure.iter(),
-        requirements,
-        expr_cont,
-    );
-    solver.minimize(&metric);
-    solver.minimize(&metric2);
-
-    match solver.check(&[]) {
-        // TODO: unsat core generation when upstream adds support for it
-        z3::SatResult::Unsat => Ok(ResolutionResult::Unsat),
-        z3::SatResult::Unknown => Err(ResolutionError::ResolutionFailure {
-            reason: solver
-                .get_reason_unknown()
-                .expect("Impossible: failed to obtain a reason"),
-        }),
-        z3::SatResult::Sat => {
-            let model = solver
-                .get_model()
-                .expect("Impossible: satisfiable but failed to generate a model");
-
-            let plan = plan_from_model(&ctx, model, closure.iter());
-
-            Ok(ResolutionResult::Sat {
-                plans: Vec1::new(plan),
-            })
-        }
-    }
+    optimize_with(repo, requirements, |ctx, package_pairs, closure| {
+        let metric = installed_packages(ctx, closure.iter());
+        let metric2 = distance_from_newest(ctx, package_pairs.into_iter());
+        vec![metric, metric2]
+    })
 }
 
 fn parallel_optimize_with<T: Ord>(
