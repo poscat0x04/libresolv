@@ -1,8 +1,11 @@
-pub mod expr;
+#[cfg(feature = "arbitrary")]
+pub(crate) mod arbitrary;
+pub(crate) mod expr;
 
 use intmap::IntMap;
+use itertools::Itertools;
 use pretty::{DocAllocator, DocBuilder, Pretty};
-use std::{fmt::Display, iter::Chain, slice, vec};
+use std::{cmp::Ordering, fmt::Display, iter::Chain, slice, vec};
 use termcolor::ColorSpec;
 use vec1::Vec1;
 
@@ -42,16 +45,26 @@ impl Display for Range {
     }
 }
 
+impl<'a, D, A> Pretty<'a, D, A> for Range
+where
+    D: DocAllocator<'a, A>,
+    A: 'a,
+{
+    fn pretty(self, allocator: &'a D) -> DocBuilder<'a, D, A> {
+        allocator.as_string(self)
+    }
+}
+
 impl Range {
     pub fn point(v: Version) -> Self {
         Self::Point(v)
     }
 
     pub fn interval(lower: Version, upper: Version) -> Option<Self> {
-        if lower < upper {
-            Some(Self::Interval { lower, upper })
-        } else {
-            None
+        match lower.cmp(&upper) {
+            Ordering::Less => Some(Self::Interval { lower, upper }),
+            Ordering::Equal => Some(Self::Point(lower)),
+            Ordering::Greater => None,
         }
     }
 
@@ -64,20 +77,10 @@ impl Range {
     }
 }
 
-impl<'a, D, A> Pretty<'a, D, A> for Range
-where
-    D: DocAllocator<'a, A>,
-    A: 'a,
-{
-    fn pretty(self, allocator: &'a D) -> DocBuilder<'a, D, A> {
-        allocator.as_string(self)
-    }
-}
-
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Eq, PartialEq, Debug, Clone)]
 pub struct Requirement {
     pub package: PackageId,
-    pub versions: Vec<Range>,
+    pub versions: Vec1<Range>,
 }
 
 impl<'a, D> Pretty<'a, D, ColorSpec> for Requirement
@@ -124,21 +127,21 @@ where
 }
 
 impl Requirement {
-    pub fn new(package: PackageId, versions: Vec<Range>) -> Self {
+    pub fn new(package: PackageId, versions: Vec1<Range>) -> Self {
         Self { package, versions }
     }
 
     pub fn any_version(package: PackageId) -> Self {
         Self {
             package,
-            versions: vec![Range::all()],
+            versions: vec1![Range::all()],
         }
     }
 
     pub fn single_version(package: PackageId, version: Version) -> Self {
         Self {
             package,
-            versions: vec![Range::point(version)],
+            versions: vec1![Range::point(version)],
         }
     }
 
@@ -146,12 +149,12 @@ impl Requirement {
         let r = Range::interval(lower, upper)?;
         Some(Self {
             package,
-            versions: vec![r],
+            versions: vec1![r],
         })
     }
 }
 
-#[derive(Eq, PartialEq, Debug, Default)]
+#[derive(Eq, PartialEq, Debug, Default, Clone)]
 pub struct RequirementSet {
     pub dependencies: Vec<Requirement>,
     pub conflicts: Vec<Requirement>,
@@ -240,7 +243,7 @@ impl RequirementSet {
 }
 
 #[repr(transparent)]
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Eq, PartialEq, Debug, Clone)]
 pub struct PackageVer {
     pub requirements: RequirementSet,
 }
@@ -254,6 +257,8 @@ where
         self.requirements.pretty(allocator)
     }
 }
+
+#[cfg(feature = "arbitrary")]
 
 impl PackageVer {
     pub fn deps(&self) -> impl Iterator<Item = &Requirement> {
@@ -283,7 +288,7 @@ where
     }
 }
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Eq, PartialEq, Debug, Clone)]
 pub struct Package {
     pub id: PackageId,
     pub versions: Vec<PackageVer>,
@@ -324,6 +329,7 @@ impl Package {
     }
 }
 
+#[derive(Eq, PartialEq, Clone, Debug)]
 pub struct Repository {
     pub packages: Vec<Package>,
 }
@@ -363,7 +369,7 @@ pub enum ResolutionError {
     TimeOut,
 }
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Eq, PartialEq, Debug, Clone)]
 pub struct ConstraintSet {
     pub package_reqs: IntMap<IntMap<RequirementSet>>,
     pub toplevel_reqs: RequirementSet,
@@ -377,10 +383,10 @@ where
     fn pretty(self, allocator: &'a D) -> DocBuilder<'a, D, ColorSpec> {
         let pkg_constraint_doc = {
             let mut doc = allocator.nil();
-            let mut pkg_reqs = self.package_reqs.into_iter().collect::<Vec<_>>();
+            let mut pkg_reqs = self.package_reqs.into_iter().collect_vec();
             pkg_reqs.sort_by_key(|(pid, _)| *pid);
             for (pid, reqs) in pkg_reqs {
-                let mut reqs = reqs.into_iter().collect::<Vec<_>>();
+                let mut reqs = reqs.into_iter().collect_vec();
                 reqs.sort_by_key(|(version, _)| *version);
                 doc += allocator.text(format!("Package {pid}:"))
                     + allocator.hardline()
@@ -408,7 +414,7 @@ where
     }
 }
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Eq, PartialEq, Debug, Clone)]
 pub enum ResolutionResult {
     Unsat,
     UnsatWithCore { core: ConstraintSet },
@@ -451,6 +457,16 @@ where
     }
 }
 
+impl ResolutionResult {
+    pub fn is_sat(&self) -> bool {
+        matches!(self, Self::Sat { .. })
+    }
+
+    pub fn is_unsat(&self) -> bool {
+        !self.is_sat()
+    }
+}
+
 pub type Res = Result<ResolutionResult, ResolutionError>;
 
 #[cfg(test)]
@@ -466,7 +482,7 @@ mod test {
         let arena = Arena::new();
         let req = Requirement {
             package: 1,
-            versions: vec![
+            versions: vec1![
                 Range::interval_unchecked(1, 2),
                 Range::interval_unchecked(3, 4),
                 Range::interval_unchecked(5, 6),

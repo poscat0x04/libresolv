@@ -53,7 +53,7 @@ impl AsConstraints for Requirement {
         let mut expr = Bool::from_bool(ctx, false);
         let mut sym_expr = Expr::bot();
 
-        for r in merge_and_sort_ranges(&self.versions) {
+        for r in merge_and_sort_ranges(self.versions.as_vec()) {
             match r {
                 Range::Interval { lower, upper } => {
                     expr |= v.ge(&Int::from_u64(ctx, lower)) & v.le(&Int::from_u64(ctx, upper));

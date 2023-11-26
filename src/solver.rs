@@ -70,9 +70,9 @@ fn process_unsat_core(repo: &Repository, core_assertions: Vec<&Expr<'_>>) -> Con
             Expr::Atom(e) => match e {
                 AtomicExpr::VerEq { pid, version } => {
                     if *version == 0 {
-                        conflicts.push(Requirement::new(*pid, vec![Range::all()]))
+                        conflicts.push(Requirement::new(*pid, vec1![Range::all()]))
                     } else {
-                        dependencies.push(Requirement::new(*pid, vec![Range::point(*version)]))
+                        dependencies.push(Requirement::new(*pid, vec1![Range::point(*version)]))
                     }
                 }
                 AtomicExpr::VerLE { pid, version } => {
@@ -98,7 +98,7 @@ fn process_unsat_core(repo: &Repository, core_assertions: Vec<&Expr<'_>>) -> Con
                         pid: pid2,
                         version: 0,
                     }) => {
-                        req = Some(Requirement::new(*pid2, vec![Range::all()]));
+                        req = Some(Requirement::new(*pid2, vec1![Range::all()]));
                         reverse = true;
                     }
                     Expr::Not(e) => {
@@ -154,9 +154,9 @@ fn process_unsat_core(repo: &Repository, core_assertions: Vec<&Expr<'_>>) -> Con
 }
 
 fn process_version_range(expr: &Expr<'_>) -> Requirement {
-    fn go(expr: &Expr<'_>) -> (PackageId, Vec<Range>) {
+    fn go(expr: &Expr<'_>) -> (PackageId, Vec1<Range>) {
         match expr {
-            Expr::Atom(AtomicExpr::VerEq { pid, version }) => (*pid, vec![Range::point(*version)]),
+            Expr::Atom(AtomicExpr::VerEq { pid, version }) => (*pid, vec1![Range::point(*version)]),
             Expr::And(lhs, rhs) => {
                 let mut lb = 0;
                 let mut ub = 0;
@@ -183,20 +183,20 @@ fn process_version_range(expr: &Expr<'_>) -> Requirement {
                     }
                     _ => panic!("Impossible: unknown rhs {rhs} of the expression {expr}"),
                 }
-                let rs = vec![Range::interval(lb, ub).unwrap_or_else(|| {
+                let rs = vec1![Range::interval(lb, ub).unwrap_or_else(|| {
                     panic!("Impossible: lower bound is bigger than upper bound in expr {expr}")
                 })];
                 (package_id, rs)
             }
             Expr::Or(lhs, rhs) => {
                 let (pid1, mut rs1) = go(lhs);
-                let (pid2, mut rs2) = go(rhs);
+                let (pid2, rs2) = go(rhs);
                 assert_eq!(pid1, pid2);
-                rs1.append(&mut rs2);
+                rs1.append(&mut rs2.into_vec());
                 (pid1, rs1)
             }
             Expr::Not(Expr::Atom(AtomicExpr::VerEq { pid, version: 0 })) => {
-                (*pid, vec![Range::all()])
+                (*pid, vec1![Range::all()])
             }
             _ => panic!("Impossible: unknown expression {expr} for version range(s)"),
         }
@@ -209,7 +209,7 @@ fn process_version_range(expr: &Expr<'_>) -> Requirement {
 pub fn simple_solve(repo: &Repository, requirements: &RequirementSet) -> Res {
     let cfg = default_config();
     let ctx = Context::new(&cfg);
-    let solver = Solver::new_for_logic(&ctx, "QF_FD").unwrap();
+    let solver = Solver::new_for_logic(&ctx, "QF_LIA").unwrap();
     solver.set_params(&default_params(&ctx));
 
     let allocator = Bump::new();
@@ -363,15 +363,14 @@ pub fn optimize_minimal(repo: &Repository, requirements: &RequirementSet) -> Res
     }
 }
 
-pub fn parallel_optimize_with<T: Ord>(
+fn parallel_optimize_with<T: Ord>(
     repo: &Repository,
     requirements: &RequirementSet,
     ctx: &Context,
     closure: SetU32,
     eval: impl Fn(&Model) -> T,
 ) -> Res {
-    let solver = Solver::new_for_logic(ctx, "QF_FD").unwrap();
-    solver.set_params(&default_params(ctx));
+    let solver = Solver::new_for_logic(ctx, "QF_LIA").unwrap();
 
     let allocator = Bump::new();
 
@@ -431,6 +430,7 @@ pub fn parallel_optimize_with<T: Ord>(
     }
 }
 
+#[deprecated(note = "This function does not actually parallelize and is very slow")]
 pub fn parallel_optimize_newest(repo: &Repository, requirements: &RequirementSet) -> Res {
     let closure = find_closure(repo, requirements.into_iter());
     let package_pairs = closure
@@ -449,6 +449,7 @@ pub fn parallel_optimize_newest(repo: &Repository, requirements: &RequirementSet
     })
 }
 
+#[deprecated(note = "This function does not actually parallelize and is very slow")]
 pub fn parallel_optimize_minimal(repo: &Repository, requirements: &RequirementSet) -> Res {
     let closure = find_closure(repo, requirements.into_iter());
     let package_pairs = closure
@@ -501,7 +502,7 @@ mod test {
             versions: vec![PackageVer {
                 requirements: RequirementSet::from_deps(vec![Requirement::new(
                     0,
-                    vec![Range::interval_unchecked(1, 3)],
+                    vec1![Range::interval_unchecked(1, 3)],
                 )]),
             }],
         };
@@ -511,21 +512,21 @@ mod test {
                 PackageVer {
                     requirements: RequirementSet::from_deps(vec![Requirement::new(
                         0,
-                        vec![Range::interval_unchecked(3, 4)],
+                        vec1![Range::interval_unchecked(3, 4)],
                     )]),
                 },
                 PackageVer {
                     requirements: RequirementSet::from_deps(vec![Requirement::new(
                         0,
-                        vec![Range::interval_unchecked(3, 4)],
+                        vec1![Range::interval_unchecked(3, 4)],
                     )]),
                 },
             ],
         };
-        let mut req_set = RequirementSet::from_deps(vec![Requirement::new(2, vec![Range::all()])]);
+        let mut req_set = RequirementSet::from_deps(vec![Requirement::new(2, vec1![Range::all()])]);
         req_set.add_deps(vec![Requirement::new(
             1,
-            vec![Range::interval_unchecked(1, 1)],
+            vec1![Range::interval_unchecked(1, 1)],
         )]);
         let repo = Repository {
             packages: vec![p0, p1, p2],

@@ -15,12 +15,8 @@ pub fn set_global_params() {
 pub fn default_params(ctx: &Context) -> Params<'_> {
     let mut p = Params::new(ctx);
     p.set_bool("unsat_core", true);
-    p.set_bool("parallel.enable", true);
-    p.set_bool("sat.core.minimize", true);
-    p.set_u32("sat.threads", 12);
-    p.set_bool("smt.core.minimize", true);
-    p.set_u32("smt.threads", 12);
-    p.set_bool(":core.minimize", true);
+    p.set_bool("core.minimize", true);
+    p.set_u32("threads", 12);
     p
 }
 
@@ -55,7 +51,7 @@ pub fn distance_from_newest(
             ._eq(&zero(ctx))
             .ite(&zero(ctx), &(Int::from_u64(ctx, max_ver) - pkg_ver));
     }
-    expr
+    expr.simplify()
 }
 
 // the expression representing the number of packages installed, useful as an optimization metric
@@ -64,7 +60,7 @@ pub fn installed_packages(ctx: &Context, pids: impl Iterator<Item = PackageId>) 
     for pid in pids {
         expr += sgn(ctx, Int::new_const(ctx, pid));
     }
-    expr
+    expr.simplify()
 }
 
 pub fn eval_int_expr_in_model(model: &Model, expr: &Int) -> u64 {
@@ -142,23 +138,51 @@ pub fn enumerate_models<'a, T: Ast<'a>>(
 
 #[cfg(test)]
 mod test {
-    use crate::z3_helpers::{default_config, set_params};
-    use z3::ast::{Ast, Int};
-    use z3::{Context, Solver};
+    use crate::z3_helpers::{default_config, set_global_params};
+    use z3::ast::{Ast, Bool, Int};
+    use z3::{Context, Goal, Solver, Tactic};
 
     #[test]
     fn test_build_context() {
-        set_params();
+        set_global_params();
         let cfg = default_config();
         let ctx = Context::new(&cfg);
-        let mut solver = Solver::new(&ctx);
+        let solver = Solver::new(&ctx);
         let v = Int::new_const(&ctx, 1);
-        let v2 = Int::new_const(&ctx, 1);
-        println!("{:?}", v._eq(&Int::from_u64(&ctx, 0)));
-        solver.assert(&v._eq(&Int::from_u64(&ctx, 0)).not());
+        let expr = Bool::from_bool(&ctx, true)
+            & (v.ge(&Int::from_u64(&ctx, 1)) & v.ge(&Int::from_u64(&ctx, 2)));
+        println!("{:?}", expr);
+
+        let tactic = Tactic::new(&ctx, "propagate-ineqs");
+        let goal = Goal::new(&ctx, false, false, false);
+        goal.assert(&expr);
+        let r = tactic.apply(&goal, None).unwrap();
+        for res in r.list_subgoals() {
+            println!("{}", res)
+        }
+
+        println!("{:?}", expr.decl().arity());
+        solver.assert(&expr.not());
         println!("{:?}", solver.check());
         let model = solver.get_model().unwrap();
         let assigned_value = model.get_const_interp(&v).unwrap();
         println!("{:?}", assigned_value.as_u64());
+    }
+
+    #[test]
+    fn test_iter_clone() {
+        let v = [1, 2, 3, 4, 5, 6, 7];
+        let mut iter = v.iter().map(|x| x + 1);
+        iter.next();
+        iter.next();
+        for i in iter.clone() {
+            println!("{i}")
+        }
+        for i in iter.clone() {
+            println!("{i}")
+        }
+        for i in iter {
+            println!("o: {i}")
+        }
     }
 }
