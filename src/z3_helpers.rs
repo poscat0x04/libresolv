@@ -1,5 +1,6 @@
 use crate::types::*;
-use z3::ast::{Ast, Int};
+use tinyset::SetU32;
+use z3::ast::{Ast, Bool, Int};
 use z3::SatResult::Sat;
 use z3::{set_global_param, Config, Context, Model, Params, Solver};
 
@@ -134,6 +135,52 @@ pub fn enumerate_models<'a, T: Ast<'a>>(
         }
     }
     go(solver, &mut cont, vars);
+}
+
+pub fn installation_status(
+    ctx: &Context,
+    model: &Model,
+    closure: impl Iterator<Item = PackageId>,
+) -> (Vec<PackageId>, Vec<PackageId>) {
+    let mut not_installed = Vec::new();
+    let mut installed = Vec::new();
+    for pid in closure {
+        let p = Int::new_const(ctx, pid);
+        if let Some(interp) = model.get_const_interp(&p) {
+            if let Some(v) = interp.as_u64() {
+                if v != 0 {
+                    installed.push(pid);
+                    continue;
+                }
+            }
+        }
+        not_installed.push(pid);
+    }
+    (installed, not_installed)
+}
+
+pub fn fix_installed_pkgs(ctx: &Context, solver: &Solver, not_installed: &Vec<PackageId>) {
+    for pid in not_installed {
+        solver.assert(&Int::new_const(ctx, *pid)._eq(&zero(ctx)));
+    }
+}
+
+pub fn block_le_solutions(
+    ctx: &Context,
+    solver: &Solver,
+    model: &Model,
+    installed: &Vec<PackageId>,
+) {
+    let mut e = Bool::from_bool(ctx, true);
+    for pid in installed {
+        let p = Int::new_const(ctx, *pid);
+        let v = eval_int_expr_in_model(model, &p);
+        let v_expr = Int::from_u64(ctx, v);
+        e &= p._eq(&v_expr);
+        solver.assert(&p.ge(&v_expr));
+    }
+    e = e.not().simplify();
+    solver.assert(&e);
 }
 
 #[cfg(test)]

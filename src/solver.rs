@@ -6,8 +6,8 @@ use crate::{
     },
     utils::iter_max_map,
     z3_helpers::{
-        default_config, default_params, distance_from_newest, enumerate_models,
-        eval_int_expr_in_model, installed_packages,
+        block_le_solutions, default_config, default_params, distance_from_newest, enumerate_models,
+        eval_int_expr_in_model, fix_installed_pkgs, installation_status, installed_packages,
     },
 };
 
@@ -19,7 +19,7 @@ use tinyset::SetU32;
 use vec1::Vec1;
 use z3::{
     ast::{Ast, Bool, Int},
-    Context, Model, Optimize, Solver,
+    Context, Model, Optimize, SatResult, Solver,
 };
 
 fn plan_from_model(ctx: &Context, model: Model, pids: impl Iterator<Item = PackageId>) -> Plan {
@@ -235,7 +235,7 @@ pub fn simple_solve(repo: &Repository, requirements: &RequirementSet) -> Res {
     );
 
     match solver.check() {
-        z3::SatResult::Unsat => {
+        SatResult::Unsat => {
             let core_vars = solver.get_unsat_core();
             let mut core_assertions = Vec::new();
             for var in core_vars {
@@ -249,15 +249,25 @@ pub fn simple_solve(repo: &Repository, requirements: &RequirementSet) -> Res {
             let core = process_unsat_core(repo, core_assertions);
             Ok(ResolutionResult::UnsatWithCore { core })
         }
-        z3::SatResult::Unknown => Err(ResolutionError::ResolutionFailure {
+        SatResult::Unknown => Err(ResolutionError::ResolutionFailure {
             reason: solver
                 .get_reason_unknown()
                 .expect("Impossible: failed to obtain a reason"),
         }),
-        z3::SatResult::Sat => {
-            let model = solver
+        SatResult::Sat => {
+            let mut model = solver
                 .get_model()
                 .expect("Impossible: satisfiable but failed to generate a model");
+            let (installed_pkgs, not_installed_pkgs) =
+                installation_status(&ctx, &model, closure.iter());
+            fix_installed_pkgs(&ctx, &solver, &not_installed_pkgs);
+
+            while matches!(solver.check(), SatResult::Sat) {
+                model = solver
+                    .get_model()
+                    .expect("Impossible: satisfiable but failed to generate a model");
+                block_le_solutions(&ctx, &solver, &model, &installed_pkgs);
+            }
 
             let plan = plan_from_model(&ctx, model, closure.iter());
 
@@ -310,7 +320,7 @@ pub fn optimize_with(
     }
 
     match solver.check(&[]) {
-        z3::SatResult::Unsat => {
+        SatResult::Unsat => {
             let core_vars = solver.get_unsat_core();
             let mut core_assertions = Vec::new();
             for var in core_vars {
@@ -324,12 +334,12 @@ pub fn optimize_with(
             let core = process_unsat_core(repo, core_assertions);
             Ok(ResolutionResult::UnsatWithCore { core })
         }
-        z3::SatResult::Unknown => Err(ResolutionError::ResolutionFailure {
+        SatResult::Unknown => Err(ResolutionError::ResolutionFailure {
             reason: solver
                 .get_reason_unknown()
                 .expect("Impossible: failed to obtain a reason"),
         }),
-        z3::SatResult::Sat => {
+        SatResult::Sat => {
             let model = solver
                 .get_model()
                 .expect("Impossible: satisfiable but failed to generate a model");
@@ -393,7 +403,7 @@ fn parallel_optimize_with<T: Ord>(
         .collect::<Vec<_>>();
 
     match solver.check() {
-        z3::SatResult::Unsat => {
+        SatResult::Unsat => {
             let core_vars = solver.get_unsat_core();
             let mut core_assertions = Vec::new();
             for var in core_vars {
@@ -407,12 +417,12 @@ fn parallel_optimize_with<T: Ord>(
             let core = process_unsat_core(repo, core_assertions);
             Ok(ResolutionResult::UnsatWithCore { core })
         }
-        z3::SatResult::Unknown => Err(ResolutionError::ResolutionFailure {
+        SatResult::Unknown => Err(ResolutionError::ResolutionFailure {
             reason: solver
                 .get_reason_unknown()
                 .expect("Impossible: failed to obtain a reason"),
         }),
-        z3::SatResult::Sat => {
+        SatResult::Sat => {
             let mut models = Vec::new();
             let cont = |model| models.push(model);
 
