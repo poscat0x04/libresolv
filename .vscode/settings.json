@@ -1,8 +1,3 @@
 {
-  "rust-analyzer.cargo.extraEnv": {
-    "Z3_SYS_Z3_HEADER": "/usr/include/z3/z3.h"
-  },
-  "rust-analyzer.runnables.extraEnv": {
-    "Z3_SYS_Z3_HEADER": "/usr/include/z3/z3.h"
-  }
+  "rust-analyzer.cargo.features": "all"
 }

@@ -15,9 +15,6 @@
           "--lib",
           "--package=libresolv",
         ],
-        "env": {
-          "Z3_SYS_Z3_HEADER": "/usr/include/z3/z3.h"
-        },
         "filter": {
           "name": "libresolv",
           "kind": "lib"

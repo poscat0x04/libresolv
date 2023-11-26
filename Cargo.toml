@@ -11,17 +11,27 @@ repository = "https://github.com/poscat0x04/libresolv"
 readme = "README.md"
 license = "BSD-3"
 
+[features]
+arbitrary = ["dep:proptest"]
+
 [dependencies]
-z3 = "0.12"
 itertools = "0.12"
 intmap = "2.0"
 bumpalo = "3.14"
 vec1 = "1.10"
 termcolor = "1.4"
 
+[dependencies.z3]
+version = "0.12"
+registry = "gitea"
+
 [dependencies.pretty]
 version = "0.12"
 features = ["termcolor"]
+
+[dependencies.proptest]
+version = "1.4"
+optional = true
 
 [dependencies.tinyset]
 version = "0.4"
