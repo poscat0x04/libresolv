@@ -299,11 +299,8 @@ pub fn optimize_with(
     let metrics = gen_metric(&ctx, package_pairs, closure.clone());
 
     let mut assert_id = 0;
-    let mut assertion_map = HashMap::new();
-    let expr_cont = |expr: Bool, sym_expr| {
-        let assert_var = Bool::new_const(&ctx, assert_id);
-        solver.assert_and_track(&expr.simplify(), &assert_var);
-        assertion_map.insert(assert_var, sym_expr);
+    let expr_cont = |expr: Bool, _sym_expr| {
+        solver.assert(&expr.simplify());
         assert_id += 1;
     };
     add_all_constraints(
@@ -320,20 +317,7 @@ pub fn optimize_with(
     }
 
     match solver.check(&[]) {
-        SatResult::Unsat => {
-            let core_vars = solver.get_unsat_core();
-            let mut core_assertions = Vec::new();
-            for var in core_vars {
-                let assertion = assertion_map.get(&var).unwrap_or_else(|| {
-                    panic!(
-                        "Impossible: unable to find the assertion tracked by the boolean variable {var} in the assertion map"
-                    )
-                });
-                core_assertions.push(assertion);
-            }
-            let core = process_unsat_core(repo, core_assertions);
-            Ok(ResolutionResult::UnsatWithCore { core })
-        }
+        SatResult::Unsat => simple_solve(repo, requirements),
         SatResult::Unknown => Err(ResolutionError::ResolutionFailure {
             reason: solver
                 .get_reason_unknown()
