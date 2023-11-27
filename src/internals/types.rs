@@ -1,19 +1,21 @@
 #[cfg(feature = "arbitrary")]
 pub(crate) mod arbitrary;
 pub(crate) mod expr;
+pub(crate) mod vec1;
 
 use intmap::IntMap;
 use itertools::Itertools;
 use pretty::{DocAllocator, DocBuilder, Pretty};
+use rkyv::{Archive, Deserialize, Serialize};
 use std::{cmp::Ordering, fmt::Display, iter::Chain, slice, vec};
 use termcolor::ColorSpec;
-use vec1::Vec1;
 
 use crate::internals::utils::{blue_text, green_text, red_text};
 
 #[cfg(feature = "arbitrary")]
 pub use arbitrary::*;
 pub use expr::*;
+pub use vec1::*;
 
 // We use (initial segments of) positive integers to represent versions since the
 // set of known versions are necessarily finite and hence are orderisomorphic
@@ -31,7 +33,7 @@ pub type Index = u32;
 pub type Plan = Vec<(PackageId, Version)>;
 
 // Version range
-#[derive(Eq, PartialEq, Debug, Clone)]
+#[derive(Eq, PartialEq, Debug, Clone, Archive, Serialize, Deserialize)]
 pub enum Range {
     Interval { lower: Version, upper: Version },
     Point(Version),
@@ -80,7 +82,7 @@ impl Range {
     }
 }
 
-#[derive(Eq, PartialEq, Debug, Clone)]
+#[derive(Eq, PartialEq, Debug, Clone, Archive, Serialize, Deserialize)]
 pub struct Requirement {
     pub package: PackageId,
     pub versions: Vec1<Range>,
@@ -157,7 +159,7 @@ impl Requirement {
     }
 }
 
-#[derive(Eq, PartialEq, Debug, Default, Clone)]
+#[derive(Eq, PartialEq, Debug, Default, Clone, Archive, Serialize, Deserialize)]
 pub struct RequirementSet {
     pub dependencies: Vec<Requirement>,
     pub conflicts: Vec<Requirement>,
@@ -246,7 +248,7 @@ impl RequirementSet {
 }
 
 #[repr(transparent)]
-#[derive(Eq, PartialEq, Debug, Clone)]
+#[derive(Eq, PartialEq, Debug, Clone, Archive, Serialize, Deserialize)]
 pub struct PackageVer {
     pub requirements: RequirementSet,
 }
@@ -291,7 +293,7 @@ where
     }
 }
 
-#[derive(Eq, PartialEq, Debug, Clone)]
+#[derive(Eq, PartialEq, Debug, Clone, Archive, Serialize, Deserialize)]
 pub struct Package {
     pub id: PackageId,
     pub versions: Vec<PackageVer>,
@@ -332,7 +334,7 @@ impl Package {
     }
 }
 
-#[derive(Eq, PartialEq, Clone, Debug)]
+#[derive(Eq, PartialEq, Clone, Debug, Archive, Serialize, Deserialize)]
 pub struct Repository {
     pub packages: Vec<Package>,
 }
@@ -474,7 +476,7 @@ pub type Res = Result<ResolutionResult, ResolutionError>;
 
 #[cfg(test)]
 mod test {
-    use crate::internals::types::Requirement;
+    use crate::internals::types::{vec1, Requirement};
 
     use super::{Range, RequirementSet};
     use pretty::{Arena, Pretty};

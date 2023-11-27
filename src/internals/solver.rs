@@ -1,16 +1,14 @@
 use crate::internals::{
     constraints::{add_all_constraints, find_closure},
     types::*,
-    utils::z3::*,
+    utils::{iter_max_map, z3::*},
 };
 
-use crate::internals::utils::iter_max_map;
 use bumpalo::Bump;
 use intmap::IntMap;
 use itertools::Itertools;
 use std::collections::HashMap;
 use tinyset::SetU32;
-use vec1::Vec1;
 use z3::{
     ast::{Ast, Bool, Int},
     Config, Context, Model, Optimize, SatResult, Solver,
@@ -463,6 +461,7 @@ mod test {
         types::{Package, PackageVer, Range, Repository, Requirement, RequirementSet},
         utils::set_global_params,
     };
+    use crate::vec1;
 
     use super::simple_solve;
 
