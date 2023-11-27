@@ -1,5 +1,4 @@
 use crate::types::*;
-use tinyset::SetU32;
 use z3::ast::{Ast, Bool, Int};
 use z3::SatResult::Sat;
 use z3::{set_global_param, Config, Context, Model, Params, Solver};
