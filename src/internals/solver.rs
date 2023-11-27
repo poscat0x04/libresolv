@@ -1,16 +1,10 @@
-use crate::{
+use crate::internals::{
     constraints::{add_all_constraints, find_closure},
-    types::{
-        expr::{AtomicExpr, Expr},
-        *,
-    },
-    utils::iter_max_map,
-    z3_helpers::{
-        block_le_solutions, default_config, default_params, distance_from_newest, enumerate_models,
-        eval_int_expr_in_model, fix_installed_pkgs, installation_status, installed_packages,
-    },
+    types::*,
+    utils::z3::*,
 };
 
+use crate::internals::utils::iter_max_map;
 use bumpalo::Bump;
 use intmap::IntMap;
 use itertools::Itertools;
@@ -278,7 +272,7 @@ pub fn simple_solve(repo: &Repository, requirements: &RequirementSet) -> Res {
     }
 }
 
-pub fn optimize_with(
+fn optimize_with(
     repo: &Repository,
     requirements: &RequirementSet,
     gen_metric: impl FnOnce(&Context, Vec<(u32, u64)>, SetU32) -> Vec<Int>,
@@ -464,10 +458,10 @@ pub fn parallel_optimize_minimal(repo: &Repository, requirements: &RequirementSe
 
 #[cfg(test)]
 mod test {
-    use crate::{
+    use crate::internals::{
         solver::{optimize_minimal, optimize_newest},
         types::{Package, PackageVer, Range, Repository, Requirement, RequirementSet},
-        z3_helpers::set_global_params,
+        utils::set_global_params,
     };
 
     use super::simple_solve;

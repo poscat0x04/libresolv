@@ -1,4 +1,4 @@
-use crate::types::*;
+use crate::internals::types::*;
 use z3::ast::{Ast, Bool, Int};
 use z3::SatResult::Sat;
 use z3::{set_global_param, Config, Context, Model, Params, Solver};
@@ -183,7 +183,7 @@ pub fn block_le_solutions(
 
 #[cfg(test)]
 mod test {
-    use crate::z3_helpers::{default_config, set_global_params};
+    use super::{default_config, set_global_params};
     use z3::ast::{Ast, Bool, Int};
     use z3::{Context, Goal, Solver, Tactic};
 

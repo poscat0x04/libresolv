@@ -1,7 +1,7 @@
-use crate::types::expr::*;
-use crate::types::*;
-use crate::utils::merge_and_sort_ranges;
-use crate::z3_helpers::zero;
+use crate::internals::{
+    types::*,
+    utils::{merge_and_sort_ranges, zero},
+};
 use bumpalo::Bump;
 use tinyset::SetU32;
 use z3::ast::{Ast, Bool, Int};

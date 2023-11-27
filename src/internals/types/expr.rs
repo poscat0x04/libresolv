@@ -6,7 +6,7 @@ use std::fmt::{self, Formatter};
 
 use bumpalo::Bump;
 
-use crate::types::*;
+use crate::internals::types::*;
 
 pub trait DisplayPrec {
     type Prec: PartialOrd;
@@ -228,7 +228,7 @@ impl DisplayPrec for Expr<'_> {
 mod test {
     use bumpalo::Bump;
 
-    use crate::types::expr::ViaDisplayPrec;
+    use crate::internals::types::expr::ViaDisplayPrec;
 
     use super::{AtomicExpr, Expr};
 

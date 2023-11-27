@@ -5,7 +5,7 @@ use std::{
     rc::Rc,
 };
 
-use crate::types::*;
+use crate::internals::types::*;
 use itertools::Itertools;
 use proptest::{
     collection::{btree_set, vec},
@@ -443,7 +443,7 @@ mod test {
     use proptest::prelude::*;
     use termcolor::{ColorChoice, StandardStream};
 
-    use crate::{solver::optimize_newest, types::*};
+    use crate::internals::{solver::simple_solve, types::*};
 
     proptest! {
         #![proptest_config(ProptestConfig {
@@ -452,19 +452,19 @@ mod test {
         })]
         #[test]
         fn test_parallel_solver(
-            (repo, required_installs) in Repository::random_repo_with_size(10, 3, 15, None)
+            (repo, required_installs) in Repository::random_repo_with_size(100, 50, 15, None)
         ) {
             let arena = Arena::new();
             let stdout = StandardStream::stdout(ColorChoice::Auto);
             let doc = repo.clone().pretty(&arena);
-            let _ = doc.render_colored(80, stdout);
+            //let _ = doc.render_colored(80, stdout);
             let dependencies =
                 required_installs
                  .iter()
                  .map(|(&pid, _)| Requirement { package: pid, versions: vec1![Range::all()]})
                  .collect_vec();
             let requirements = RequirementSet { dependencies, conflicts: vec![] };
-            let result = optimize_newest(&repo, &requirements).unwrap();
+            let result = simple_solve(&repo, &requirements).unwrap();
             println!("{result:?}");
             prop_assert!(result.is_sat())
         }

@@ -2,12 +2,17 @@
 #[macro_use]
 extern crate vec1;
 
-pub mod constraints;
-pub mod solver;
-pub mod types;
-pub mod utils;
-pub mod z3_helpers;
+mod internals;
 
-pub mod internal {
-    pub use crate::{solver, types};
-}
+pub use internals::{
+    // resolution functions
+    solver::{optimize_minimal, optimize_newest, simple_solve},
+    // type definitions
+    types::{
+        ConstraintSet, Package, PackageId, PackageVer, Plan, Range, Repository, Requirement,
+        RequirementSet, ResolutionError, ResolutionResult, Version,
+    },
+};
+
+pub use intmap::IntMap;
+pub use vec1::Vec1;

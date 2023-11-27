@@ -9,7 +9,11 @@ use std::{cmp::Ordering, fmt::Display, iter::Chain, slice, vec};
 use termcolor::ColorSpec;
 use vec1::Vec1;
 
-use crate::utils::{blue_text, green_text, red_text};
+use crate::internals::utils::{blue_text, green_text, red_text};
+
+#[cfg(feature = "arbitrary")]
+pub use arbitrary::*;
+pub use expr::*;
 
 // We use (initial segments of) positive integers to represent versions since the
 // set of known versions are necessarily finite and hence are orderisomorphic
@@ -17,7 +21,6 @@ use crate::utils::{blue_text, green_text, red_text};
 //
 // Additionally we use 0 to represent the "uninstalled" state.
 pub type Version = u64;
-pub const VER_WIDTH: u32 = 64;
 
 // We use u32 to represent package ids to simplify lookups. This means we
 // need to ensure the packages in a specific repo are in the right order
@@ -471,7 +474,7 @@ pub type Res = Result<ResolutionResult, ResolutionError>;
 
 #[cfg(test)]
 mod test {
-    use crate::types::Requirement;
+    use crate::internals::types::Requirement;
 
     use super::{Range, RequirementSet};
     use pretty::{Arena, Pretty};

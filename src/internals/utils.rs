@@ -1,11 +1,14 @@
+pub mod z3;
+
 use std::cmp::Ordering;
 
 pub use colors::{blue_text, green_text, red_text};
 pub use interval_merging::merge_and_sort_ranges;
+pub use z3::*;
 
 // Utilities for merging intervals
 mod interval_merging {
-    use crate::types::*;
+    use crate::internals::types::*;
     use itertools::Itertools;
     use std::{
         cmp::{max, min},
@@ -134,7 +137,7 @@ mod colors {
 
 #[cfg(test)]
 mod test {
-    use crate::utils::interval_merging::{merge_insert, ISet};
+    use crate::internals::utils::interval_merging::{merge_insert, ISet};
 
     #[test]
     fn test_merge_insert() {
