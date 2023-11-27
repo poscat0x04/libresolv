@@ -19,7 +19,7 @@ use tinyset::SetU32;
 use vec1::Vec1;
 use z3::{
     ast::{Ast, Bool, Int},
-    Context, Model, Optimize, SatResult, Solver,
+    Config, Context, Model, Optimize, SatResult, Solver,
 };
 
 fn plan_from_model(ctx: &Context, model: Model, pids: impl Iterator<Item = PackageId>) -> Plan {
@@ -283,7 +283,7 @@ pub fn optimize_with(
     requirements: &RequirementSet,
     gen_metric: impl FnOnce(&Context, Vec<(u32, u64)>, SetU32) -> Vec<Int>,
 ) -> Res {
-    let cfg = default_config();
+    let cfg = Config::new();
     let ctx = Context::new(&cfg);
     let solver = Optimize::new(&ctx);
 

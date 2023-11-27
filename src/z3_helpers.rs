@@ -16,7 +16,6 @@ pub fn default_params(ctx: &Context) -> Params<'_> {
     let mut p = Params::new(ctx);
     p.set_bool("unsat_core", true);
     p.set_bool("core.minimize", true);
-    p.set_u32("threads", 12);
     p
 }
 
