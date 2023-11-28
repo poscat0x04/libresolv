@@ -19,7 +19,7 @@ itertools = "0.12"
 intmap = "2.0"
 bumpalo = "3.14"
 termcolor = "1.4"
-rkyv = "0.7"
+indexmap = "2.1"
 
 [dependencies.z3]
 version = "0.12"
@@ -37,6 +37,10 @@ optional = true
 version = "0.4"
 default-features = false
 
+[dependencies.rkyv]
+version = "0.7"
+features = ["indexmap"]
+
 [lib]
 name = "libresolv"
 path = "src/lib.rs"
@@ -44,4 +48,8 @@ test = true
 doctest = true
 bench = false
 doc = true
-crate-type = ["lib"]
+crate-type = ["lib", "staticlib", "cdylib"]
+
+[profile.release]
+opt = "s"
+lto = true

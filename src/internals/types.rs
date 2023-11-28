@@ -1,6 +1,7 @@
 #[cfg(feature = "arbitrary")]
 pub(crate) mod arbitrary;
 pub(crate) mod expr;
+pub(crate) mod extended;
 pub(crate) mod vec1;
 
 use intmap::IntMap;
